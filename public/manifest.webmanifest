@@ -1,0 +1,28 @@
+{
+  "name": "AJAY-VANI (पीएम-अजय आजीविका वाणी)",
+  "short_name": "AJAY-VANI",
+  "description": "AI-Driven Multilingual Voice Livelihood Assistant for PM-AJAY",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F6F6F6",
+  "theme_color": "#009378",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

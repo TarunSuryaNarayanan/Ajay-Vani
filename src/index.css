@@ -1,0 +1,143 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-action: #FC8A15;
+  --color-surface: #F6F6F6;
+  --color-positive: #1EE494;
+  --color-trust: #009378;
+  --color-ink: #14231F;
+  --color-ink-muted: #54655F;
+  --color-line: #E1E0DB;
+  --color-alert: #C6482E;
+  --color-offline: rgba(252, 138, 21, 0.12);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #F6F6F6;
+  color: #14231F;
+  font-family: 'Noto Sans', 'Noto Sans Devanagari', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 18px;
+  line-height: 26px;
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Typography Scale per design.md §3 */
+.font-display {
+  font-size: 28px;
+  line-height: 34px;
+  font-weight: 600;
+}
+
+.font-body {
+  font-size: 18px;
+  line-height: 26px;
+  font-weight: 400;
+}
+
+.font-caption {
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 400;
+  color: #54655F;
+}
+
+/* Strict Button Styling per design.md §5: 8px radius, 56px min height */
+.btn-primary {
+  min-height: 56px;
+  border-radius: 8px;
+  background-color: #FC8A15;
+  color: #F6F6F6;
+  font-weight: 600;
+  font-size: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px 20px;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.btn-primary:active {
+  opacity: 0.88;
+}
+
+.btn-secondary {
+  min-height: 56px;
+  border-radius: 8px;
+  background-color: #F6F6F6;
+  color: #14231F;
+  border: 1px solid #E1E0DB;
+  font-weight: 500;
+  font-size: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px 20px;
+  cursor: pointer;
+}
+
+/* Big Mic Button: circular 96px per design.md §4 & §5 */
+.btn-mic {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  background-color: #FC8A15;
+  color: #F6F6F6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 0 0 0 rgba(252, 138, 21, 0.4);
+}
+
+.btn-mic.recording {
+  animation: mic-pulse 1.8s infinite;
+}
+
+@keyframes mic-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(252, 138, 21, 0.6);
+  }
+  70% {
+    box-shadow: 0 0 0 24px rgba(252, 138, 21, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(252, 138, 21, 0);
+  }
+}
+
+/* Card Styling per design.md §5: 8px radius, 1px hairline border, no drop shadow */
+.card-flat {
+  border-radius: 8px;
+  border: 1px solid #E1E0DB;
+  background-color: #FFFFFF;
+  padding: 16px;
+}
+
+/* Accessible visible focus states per design.md §9 */
+a:focus-visible, button:focus-visible, [tabindex]:focus-visible {
+  outline: 2px solid #009378;
+  outline-offset: 2px;
+}
+
+/* Respect prefers-reduced-motion per design.md §6 */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
