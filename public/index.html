@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PM-AJAY | AJAY-VANI Government Livelihood Management Portal</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Merriweather:wght@400;700&family=Noto+Sans:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+
+  <!-- TOP TRICOLOR BAR -->
+  <div class="tricolor-bar"></div>
+
+  <!-- TOP GOVERNMENT ACCESSIBILITY & MINISTRY HEADER -->
+  <header class="govt-top-header">
+    <div class="container top-header-inner">
+      <div class="govt-emblem-section">
+        <div class="emblem-symbol">🏛️</div>
+        <div class="govt-text">
+          <div class="hindi-title">भारत सरकार | Government of India</div>
+          <div class="dept-title">सामाजिक न्याय और अधिकारिता मंत्रालय | Ministry of Social Justice and Empowerment (MoSJE)</div>
+        </div>
+      </div>
+      <div class="header-utilities">
+        <div class="accessibility-controls">
+          <span class="access-label">Font Size:</span>
+          <button id="fontDec" class="access-btn" title="Decrease Font">A-</button>
+          <button id="fontReset" class="access-btn" title="Reset Font">A</button>
+          <button id="fontInc" class="access-btn" title="Increase Font">A+</button>
+        </div>
+        <div class="lang-selector">
+          <button id="langToggle" class="lang-btn"><i class="fa-solid fa-globe"></i> <span id="langText">English / हिंदी</span></button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN PORTAL BRANDING HEADER -->
+  <div class="main-portal-header">
+    <div class="container main-header-inner">
+      <div class="portal-brand">
+        <div class="scheme-badge">PM-AJAY</div>
+        <div class="portal-titles">
+          <h1>प्रधानमंत्री अनुसूचित जाति अभ्युदय योजना (PM-AJAY)</h1>
+          <p class="subtitle">Grant-in-Aid (GIA) Component — Autonomous Voice AI Livelihood & Perspective Plan Engine</p>
+        </div>
+      </div>
+      <div class="officer-profile">
+        <div class="officer-badge"><i class="fa-solid fa-user-shield"></i> District Officer Portal</div>
+        <div class="officer-dept">State SC Development Corporation</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN CONTAINER -->
+  <main class="container portal-content">
+
+    <!-- KPI SUMMARY CARDS (GOVERNMENT ADMINISTRATIVE METRICS) -->
+    <section class="kpi-section">
+      <div class="section-header">
+        <h2><i class="fa-solid fa-chart-line"></i> GIA Component Administrative Performance Overview</h2>
+        <span class="live-indicator"><i class="fa-solid fa-circle"></i> Live Real-Time Feed</span>
+      </div>
+
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-icon icon-blue"><i class="fa-solid fa-users"></i></div>
+          <div class="kpi-details">
+            <div class="kpi-value" id="kpiSurveyed">8,450+</div>
+            <div class="kpi-label">SC Beneficiaries Surveyed</div>
+            <div class="kpi-subtext"><i class="fa-solid fa-microphone"></i> Via Voice AI & IVR</div>
+          </div>
+        </div>
+
+        <div class="kpi-card">
+          <div class="kpi-icon icon-gold"><i class="fa-solid fa-indian-rupee-sign"></i></div>
+          <div class="kpi-details">
+            <div class="kpi-value" id="kpiSanctioned">₹675.00 Lakhs</div>
+            <div class="kpi-label">Sanctioned GIA Budget</div>
+            <div class="kpi-subtext"><i class="fa-solid fa-graduation-cap"></i> ₹101.00L Earmarked Skilling (15%)</div>
+          </div>
+        </div>
+
+        <div class="kpi-card highlight-card">
+          <div class="kpi-icon icon-green"><i class="fa-solid fa-briefcase"></i></div>
+          <div class="kpi-details">
+            <div class="kpi-value" id="kpiPlacement">78%</div>
+            <div class="kpi-label">Verified Placement Rate</div>
+            <div class="kpi-subtext compliance-pass"><i class="fa-solid fa-circle-check"></i> Complies with MoSJE ≥70% Target</div>
+          </div>
+        </div>
+
+        <div class="kpi-card">
+          <div class="kpi-icon icon-purple"><i class="fa-solid fa-file-invoice"></i></div>
+          <div class="kpi-details">
+            <div class="kpi-value" id="kpiPlans">5 Zilas</div>
+            <div class="kpi-label">Perspective Plans Generated</div>
+            <div class="kpi-subtext"><i class="fa-solid fa-bolt"></i> Automated GIA PDF System</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB NAVIGATION FOR MODULES -->
+    <div class="portal-tabs">
+      <button class="tab-btn active" data-tab="tabHeatmap"><i class="fa-solid fa-map-location-dot"></i> District Skill Gap & ODOP Heatmap</button>
+      <button class="tab-btn" data-tab="tabAuditLogs"><i class="fa-solid fa-microphone-lines"></i> Live Voice Audit Logs</button>
+      <button class="tab-btn" data-tab="tabPerspectivePlan"><i class="fa-solid fa-file-pdf"></i> GIA Perspective Plan PDF Generator</button>
+      <button class="tab-btn" data-tab="tabPipeline"><i class="fa-solid fa-network-wired"></i> Placement & Financial Pipeline</button>
+    </div>
+
+    <!-- TAB 1: DISTRICT SKILL GAP & ODOP MARKET DEMAND HEATMAP -->
+    <div id="tabHeatmap" class="tab-content active">
+      <div class="panel-header">
+        <div>
+          <h3><i class="fa-solid fa-layer-group"></i> District Skill Gap & ODOP Market Demand Heatmap Matrix</h3>
+          <p>Cross-referencing beneficiary aspirations with One District One Product (ODOP) and local MSME job vacancies.</p>
+        </div>
+        <div class="filter-box">
+          <label for="districtSelect"><i class="fa-solid fa-filter"></i> Filter District:</label>
+          <select id="districtSelect" class="form-select">
+            <option value="all">All Districts (State Overall)</option>
+            <option value="Jhansi">Jhansi (Bundelkhand, UP)</option>
+            <option value="Varanasi">Varanasi (UP)</option>
+            <option value="Moradabad">Moradabad (UP)</option>
+            <option value="Coimbatore">Coimbatore (Tamil Nadu)</option>
+            <option value="Gorakhpur">Gorakhpur (UP)</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- HEATMAP SUMMARY CARDS -->
+      <div class="heatmap-summary-row" id="heatmapSummaryRow">
+        <!-- Dynamically Calculated Summary Bar -->
+      </div>
+
+      <div class="table-responsive">
+        <table class="govt-table">
+          <thead>
+            <tr>
+              <th>District Name & State</th>
+              <th>ODOP Sector & Product</th>
+              <th>Skill Demand Intensity</th>
+              <th>Active MSMEs & Vacancies</th>
+              <th>Top Demanded NSQF Skills</th>
+              <th>GIA Skilling Budget</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="heatmapTableBody">
+            <!-- Dynamically Populated -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- TAB 2: LIVE VOICE INTERVIEW AUDIT LOGS -->
+    <div id="tabAuditLogs" class="tab-content">
+      <div class="panel-header">
+        <div>
+          <h3><i class="fa-solid fa-list-check"></i> Live Beneficiary Voice Audit Log Feed</h3>
+          <p>Real-time audit stream of rural voice profiles recorded via IVR, WhatsApp Audio, and Panchayat Kiosks.</p>
+        </div>
+        <button class="btn btn-secondary" id="btnRefreshLogs"><i class="fa-solid fa-rotate"></i> Refresh Logs</button>
+      </div>
+
+      <div class="audit-feed" id="auditFeedContainer">
+        <!-- Dynamically Populated Audit Log Cards -->
+      </div>
+    </div>
+
+    <!-- TAB 3: GIA PERSPECTIVE PLAN GENERATOR -->
+    <div id="tabPerspectivePlan" class="tab-content">
+      <div class="panel-header">
+        <div>
+          <h3><i class="fa-solid fa-file-contract"></i> Auto-Generate District Perspective Plan (MoSJE Format)</h3>
+          <p>Instantly compiles ground voice survey data into an official ready-to-submit GIA Perspective Plan PDF.</p>
+        </div>
+        <div class="plan-actions">
+          <select id="planDistrictSelect" class="form-select">
+            <option value="Jhansi">Jhansi (Bundelkhand)</option>
+            <option value="Varanasi">Varanasi</option>
+            <option value="Moradabad">Moradabad</option>
+            <option value="Coimbatore">Coimbatore</option>
+            <option value="Gorakhpur">Gorakhpur</option>
+          </select>
+          <button class="btn btn-primary" id="btnGeneratePlan"><i class="fa-solid fa-file-pdf"></i> Generate & Download Official Plan PDF</button>
+        </div>
+      </div>
+
+      <div class="perspective-plan-preview" id="planPreviewContainer">
+        <!-- Generated Plan Preview -->
+      </div>
+    </div>
+
+    <!-- TAB 4: INTER-AGENCY PLACEMENT & FINANCIAL PIPELINE -->
+    <div id="tabPipeline" class="tab-content">
+      <div class="panel-header">
+        <div>
+          <h3><i class="fa-solid fa-diagram-project"></i> Inter-Agency Beneficiary Progression Pipeline</h3>
+          <p>Tracks beneficiary movement from Voice Onboarding ➔ NSQF Skilling ➔ GIA ₹50k / MUDRA Loan ➔ Verified Job Placement.</p>
+        </div>
+      </div>
+
+      <div class="pipeline-grid" id="pipelineContainer">
+        <!-- Pipeline Columns -->
+      </div>
+    </div>
+
+  </main>
+
+  <!-- OFFICIAL GOVERNMENT FOOTER -->
+  <footer class="govt-footer">
+    <div class="container footer-inner">
+      <div class="footer-left">
+        <div class="footer-logo">Pradhan Mantri Anusuchit Jaati Abhyuday Yojana (PM-AJAY)</div>
+        <p>Ministry of Social Justice and Empowerment, Government of India</p>
+        <p class="copyright">Designed & Powered by AJAY-VANI Voice AI Systems | National Informatics & Skill Engine Alignment</p>
+      </div>
+      <div class="footer-links">
+        <a href="https://dosje.gov.in" target="_blank">MoSJE Portal</a>
+        <a href="https://ncvet.gov.in" target="_blank">NCVET NSQF Repository</a>
+        <a href="https://bhashini.gov.in" target="_blank">Bhashini Mission</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+{
+  "name": "ajay-vani-portal",
+  "version": "1.0.0",
+  "description": "AJAY-VANI Government Web Portal & Backend APIs for PM-AJAY GIA Component",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.24.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "fuse.js": "^7.1.0",
+    "mongoose": "^8.12.0"
+  }
+}
