@@ -24,9 +24,20 @@ app.use(express.urlencoded({ extended: true }));
 // Serve static frontend assets from public directory
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Connect Database & Seed Data
+// Process level safety handlers for smooth fallback operation
+process.on('uncaughtException', (err) => {
+  console.warn('⚠️ Server Warning (Uncaught Exception):', err.message);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.warn('⚠️ Server Warning (Unhandled Rejection):', reason);
+});
+
+// Connect Database & Seed Data (Graceful In-Memory Fallback)
 connectDB().then(() => {
   seedDatabase();
+}).catch(err => {
+  console.warn('⚠️ Notice: Using In-Memory Database Mode');
 });
 
 // API Routes

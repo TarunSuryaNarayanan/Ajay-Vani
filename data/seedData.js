@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import NSQFPack from '../models/NSQFPack.js';
 import DistrictDemand from '../models/DistrictDemand.js';
 import Beneficiary from '../models/Beneficiary.js';
@@ -256,6 +257,10 @@ export let memoryBeneficiaries = [...sampleBeneficiaryProfiles];
 
 export async function seedDatabase() {
   try {
+    if (!mongoose.connection || mongoose.connection.readyState !== 1) {
+      console.log('⚡ Using In-Memory Database Fallback Mode for Fast Presentation Server.');
+      return;
+    }
     const nsqfCount = await NSQFPack.countDocuments();
     if (nsqfCount === 0) {
       await NSQFPack.insertMany(sampleNSQFData);
