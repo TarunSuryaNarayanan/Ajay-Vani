@@ -12,6 +12,8 @@ import { OfflineSyncScreen } from './screens/OfflineSyncScreen';
 import { AadhaarLoginScreen } from './screens/AadhaarLoginScreen';
 import { AadhaarOtpScreen } from './screens/AadhaarOtpScreen';
 import { BeneficiaryDashboardScreen } from './screens/BeneficiaryDashboardScreen';
+import { PostTrainingGuidanceScreen } from './screens/PostTrainingGuidanceScreen';
+import { MinistryDashboardScreen } from './screens/MinistryDashboardScreen';
 import { PrivacyPolicyModal } from './components/Modals/PrivacyPolicyModal';
 import { TermsModal } from './components/Modals/TermsModal';
 
@@ -38,6 +40,10 @@ const AppContent: React.FC = () => {
         return <AadhaarOtpScreen />;
       case 'beneficiary-dashboard':
         return <BeneficiaryDashboardScreen />;
+      case 'post-training-guidance':
+        return <PostTrainingGuidanceScreen />;
+      case 'ministry-dashboard':
+        return <MinistryDashboardScreen />;
       default:
         return <LanguageSelectionScreen />;
     }

@@ -141,3 +141,22 @@ a:focus-visible, button:focus-visible, [tabindex]:focus-visible {
     scroll-behavior: auto !important;
   }
 }
+
+/* Mode Indicator (E23) — Local vs Enhanced */
+.mode-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: 16px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+}
+.mode-local {
+  background-color: var(--color-positive);
+  color: #FFFFFF;
+}
+.mode-enhanced {
+  background-color: var(--color-trust);
+  color: #FFFFFF;
+}

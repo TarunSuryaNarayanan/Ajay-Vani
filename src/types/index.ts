@@ -54,6 +54,7 @@ export interface SkillingCenter {
   addressHi: string;
   googleMapsUrl?: string;
   pincode?: string;
+  qpCode?: string;
 }
 
 export interface DistrictMarket {
@@ -71,6 +72,10 @@ export interface VoiceProcessResult {
   recommendedNSQF: RecommendedNSQF;
   districtMarket: DistrictMarket;
   friendlyAudioResponse: string;
+  skillVectorHits?: string[];
+  employmentMode?: string;
+  mobilityScope?: string;
+  pmAjaySubsidy?: { amount: string; nsqfLevel: number; eligible: boolean };
 }
 
 export interface OfflineInterview {
@@ -84,6 +89,17 @@ export interface OfflineInterview {
   isSynced: boolean;
 }
 
+export interface QRToken {
+  tokenId: string;
+  beneficiaryName: string;
+  aadhaarMasked: string;
+  nsqfQpCode: string;
+  nsqfRoleNameHi: string;
+  district: string;
+  generatedAt: number;
+  isUsed: boolean;
+}
+
 export interface AadhaarSession {
   aadhaarNumber: string;
   maskedAadhaar: string;
@@ -94,6 +110,101 @@ export interface AadhaarSession {
   grantStep: number; // 1: Profiling, 2: Proposal, 3: BDO Approval Pending, 4: Disbursed
   stipendDaysAttended: number;
   stipendTotalEarned: number;
+  // Post-Course AI Guidance (F3). `completedAt` stays null until training ends.
+  courseCompleted: boolean;
+  completedAt: number | null;
+  // Lifecycle Nudge enrollment timestamp (F2) — recorded when the user clicks Enroll.
+  lifecycleEnrolledAt: number | null;
+  whatsappNumber: string | null;
+}
+
+// ─── F1: Voice-Based Grievance Redressal ─────────────────────────────────────
+
+export type GrievanceIssueType =
+  | 'trainer-absent'
+  | 'extortion'
+  | 'missing-toolkit'
+  | 'stipend-delay'
+  | 'document-fraud'
+  | 'other';
+
+export type GrievanceCaptureMode = 'form' | 'voice';
+
+export type GrievanceStatus = 'open' | 'in-review' | 'resolved';
+
+export interface GrievanceMetadata {
+  beneficiaryId: string;
+  beneficiaryName: string;
+  district: string;
+  trainingCenterId: string;
+  trainingCenterName: string;
+  nsqfQpCode: string;
+  aadhaarMasked: string;
+}
+
+export interface GrievanceTicket {
+  ticketId: string;
+  issueType: GrievanceIssueType;
+  issueTypeHi: string;
+  description: string;
+  captureMode: GrievanceCaptureMode;
+  language: LanguageCode;
+  status: GrievanceStatus;
+  forwardedToMinistry: boolean;
+  forwardedAt: number | null;
+  externalPortalForwarded: boolean;
+  resolvedNote: string | null;
+  createdAt: number;
+  updatedAt: number;
+  metadata: GrievanceMetadata;
+}
+
+// ─── F2: Automated Lifecycle Nudges via WhatsApp ─────────────────────────────
+
+export type LifecycleNudgeKey = 'day-45-checkin' | 'day-90-completion';
+
+export type LifecycleMessageDirection = 'outbound' | 'inbound';
+
+export interface LifecycleMessage {
+  messageId: string;
+  key: LifecycleNudgeKey | 'beneficiary-reply';
+  direction: LifecycleMessageDirection;
+  body: string;
+  createdAt: number;
+  deliveredAt: number | null;
+  status: 'queued' | 'sent' | 'delivered' | 'failed' | 'received';
+  error?: string;
+}
+
+export interface LifecycleEnrollment {
+  beneficiaryId: string;
+  beneficiaryName: string;
+  district: string;
+  whatsappNumber: string;
+  enrolledAt: number;
+  lastNudgeAt: number | null;
+  messages: LifecycleMessage[];
+}
+
+// ─── F3: Post-Course AI Guidance ─────────────────────────────────────────────
+
+export type PostTrainingPath = 'business' | 'job' | 'mudra';
+
+export interface PostTrainingJobOpening {
+  centerId: string;
+  centerName: string;
+  centerNameHi: string;
+  employer: string;
+  roleTitle: string;
+  roleTitleHi: string;
+  nsqfQpCode: string;
+  district: string;
+  vacancies: number;
+  monthlyStipend: string;
+  contactPhone: string;
+  address: string;
+  distanceKm: number;
+  isCertifiedMatch: boolean;
 }
 
 export type ScreenType = 
@@ -105,4 +216,6 @@ export type ScreenType =
   | 'offline-sync'
   | 'aadhaar-login'
   | 'aadhaar-otp'
-  | 'beneficiary-dashboard';
+  | 'beneficiary-dashboard'
+  | 'post-training-guidance'
+  | 'ministry-dashboard';

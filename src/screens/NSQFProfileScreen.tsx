@@ -1,11 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { BriefcaseIcon, GraduationCapIcon, MapPinIcon, SpeakerIcon } from '../components/Icons';
+import { BriefcaseIcon, GraduationCapIcon, MapPinIcon, SpeakerIcon, QRCodeIcon } from '../components/Icons';
 import { speechService } from '../services/speech';
+import QRCode from 'qrcode';
 
 export const NSQFProfileScreen: React.FC = () => {
-  const { currentResult, selectedLanguage, setScreen } = useApp();
+  const { currentResult, selectedLanguage, setScreen, aadhaarSession, generateQRToken } = useApp();
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  const [isGeneratingQR, setIsGeneratingQR] = useState(false);
 
   const profile = currentResult?.profile || {
     beneficiaryName: "रमेश कुमार",
@@ -51,6 +54,35 @@ export const NSQFProfileScreen: React.FC = () => {
       () => setIsPlayingAudio(true),
       () => setIsPlayingAudio(false)
     );
+  };
+
+  const handleGenerateQR = async () => {
+    setIsGeneratingQR(true);
+    try {
+      const token = await generateQRToken();
+      if (token) {
+        const payload = JSON.stringify({
+          tokenId: token.tokenId,
+          beneficiaryName: token.beneficiaryName,
+          aadhaarMasked: token.aadhaarMasked,
+          nsqfQpCode: token.nsqfQpCode,
+          nsqfRoleNameHi: token.nsqfRoleNameHi,
+          district: token.district,
+          generatedAt: token.generatedAt,
+        });
+        const dataUrl = await QRCode.toDataURL(payload, {
+          errorCorrectionLevel: 'M',
+          width: 256,
+          margin: 2,
+          color: { dark: '#000000', light: '#FFFFFF' },
+        });
+        setQrDataUrl(dataUrl);
+      }
+    } catch (e) {
+      console.warn('[NSQFProfile] QR generation error:', e);
+    } finally {
+      setIsGeneratingQR(false);
+    }
   };
 
   return (
@@ -155,7 +187,27 @@ export const NSQFProfileScreen: React.FC = () => {
       </div>
 
       {/* Single Clear Action CTA per design.md §1 & §5: 8px radius rectangle */}
-      <div className="mt-6 pt-4 border-t border-line">
+      <div className="mt-6 pt-4 border-t border-line space-y-3">
+        {aadhaarSession && (
+          <button
+            onClick={handleGenerateQR}
+            disabled={isGeneratingQR}
+            className="btn-secondary w-full space-x-2"
+          >
+            <QRCodeIcon size={18} color="#009378" />
+            <span>
+              {isGeneratingQR ? "क्व आई टोकन बन रहा है..." : "डिजिटल क्यूआर टोकन जेनरेट करें (Fix #8)"}
+            </span>
+          </button>
+        )}
+        {qrDataUrl && (
+          <div className="flex flex-col items-center space-y-2 p-3 bg-white border border-line rounded">
+            <img src={qrDataUrl} alt="डिजिटल क्यूआर टोकन" className="w-32 h-32" />
+            <span className="text-xs text-ink-muted">
+              केंद्र समन्वयक द्वारा स्कैन करने के लिए
+            </span>
+          </div>
+        )}
         <button
           onClick={() => {
             speechService.stopSpeaking();

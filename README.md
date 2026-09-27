@@ -23,7 +23,9 @@ A voice-first Progressive Web App (PWA) that replaces intimidating government fo
 | **Offline Storage** | IndexedDB via `idb` |
 | **PWA** | `vite-plugin-pwa` with Service Worker |
 | **Backend** | Express.js + TypeScript (tsx) |
-| **Speech (Client)** | Web Speech API (`webkitSpeechRecognition`, `speechSynthesis`) |
+| **Speech (Client)** | Silero VAD + WebRTC MediaRecorder for voice activity detection |
+| **Speech (ASR)** | Bhashini Bharati (online) with IndicWhisper ONNX (offline, per-language pack) |
+| **Speech (TTS)** | Bhashini server-side TTS (online) with Piper ONNX (offline, Hindi only) |
 | **AI Classification** | Heuristic keyword matching (server-side) — designed for Gemini/Groq integration |
 
 ### Key Dependencies
@@ -36,7 +38,12 @@ A voice-first Progressive Web App (PWA) that replaces intimidating government fo
   "idb": "^8.0.0",
   "clsx": "^2.1.1",
   "tailwind-merge": "^2.5.2",
-  "jspdf": "^2.5.2"
+  "jspdf": "^2.5.2",
+  "@ricky0123/vad-web": "^0.0.31",
+  "onnxruntime-web": "^1.30.0",
+  "@huggingface/transformers": "^4.3.0",
+  "qrcode": "^1.5.4",
+  "compression": "^1.8.2"
 }
 ```
 
@@ -52,20 +59,83 @@ A voice-first Progressive Web App (PWA) that replaces intimidating government fo
 6. **Offline Sync Monitor** — Queue interviews locally, auto-sync when online, status indicators
 
 ### Offline-First Architecture
-- IndexedDB stores complete interview records (transcript, profile, NSQF match, district, language)
-- Network listeners trigger immediate sync on reconnection
-- Visual offline banner + pending count badge
+
+- **Voice pipeline:** Silero VAD (v5 ONNX) + WebRTC MediaRecorder for audio capture; Bhashini ASR is tried first, then local ONNX Whisper (transformers.js) when a language pack is downloaded and cached.
+- **Language packs:** Each language ships as an independently downloadable pack (ASR weights + optionally TTS voice). Packs are triggered at language selection (C15), content-addressed (C10), served from `/models/` behind `MODEL_BASE_URL`, and verified with sha256 on download.
+- **Offline TTS:** Available for **Hindi only** via Piper ONNX (`hi_IN-pratham-medium`). The other 8 languages (bho, bun, chg, mai, ta, te, mr, bn) use Bhashini Enhanced TTS online — there is no permissively-licensed, browser-viable offline TTS for them (see model feasibility in the plan).
+- **Storage:** IndexedDB stores complete interview records (transcript, profile, NSQF match, district, language)
+- **Network listeners** trigger immediate sync on reconnection
+- **Visual offline banner** + pending count badge
 
 ### Multilingual Voice Support
-- 9 Indian dialects via Web Speech API
-- Dialect-specific empathetic audio responses (Hindi, Bhojpuri, Bundeli + fallback)
-- Server-side keyword matching across Devanagari + transliterated terms
+- **9 Indian dialects** supported: Hindi, Bhojpuri, Bundeli, Chhattisgarhi, Maithili, Tamil, Telugu, Marathi, Bengali
+- **bho/bun/chg/mai** resolve to the Hindi ASR pack as an explicit, visible alias — never a silent substitution. Server-side, these also map to Hindi in the Bhashini proxy.
+- **Offline ASR:** IndicWhisper ONNX (transformers.js, q8_0) per language pack — downloaded on first use
+- **Offline TTS:** Piper ONNX, Hindi only (`hi_IN-pratham-medium`)
+- **Dialect-specific empathetic audio responses** (Hindi, Bhojpuri, Bundeli + fallback)
+- **Server-side keyword matching** across Devanagari + transliterated terms
+
+### Offline Voice Coverage (E24)
+
+| Language | Offline ASR | Offline TTS | Notes |
+|----------|-------------|-------------|-------|
+| Hindi (hi) | IndicWhisper ONNX | Piper ONNX | Full offline capability |
+| Tamil (ta) | IndicWhisper ONNX | Bhashini only | No permissive offline TTS |
+| Telugu (te) | IndicWhisper ONNX | Bhashini only | No permissive offline TTS |
+| Marathi (mr) | IndicWhisper ONNX | Bhashini only | No permissive offline TTS |
+| Bengali (bn) | IndicWhisper ONNX | Bhashini only | No permissive offline TTS |
+| Bhojpuri (bho) | Aliased to Hindi | Bhashini only | No dedicated offline model |
+| Bundeli (bun) | Aliased to Hindi | Bhashini only | No dedicated offline model |
+| Chhattisgarhi (chg) | Aliased to Hindi | Bhashini only | No dedicated offline model |
+| Maithili (mai) | Aliased to Hindi | Bhashini only | No dedicated offline model |
+
+**8 of 9 languages have no offline TTS.** This is a research finding, not a scope cut — Meta MMS is CC-BY-NC (non-commercial), Indic Parler-TTS is 2.3 GB, and Piper has no voices outside Hindi. If full offline voice is a hard requirement, revisiting the PWA-vs-native decision (sherpa-onnx) is the highest-leverage move.
 
 ### Government Scheme Integration
 - Authentic NSQF QP codes from NSDC
 - Real district demand scores (Varanasi, Gorakhpur, Patna, Bundelkhand)
 - PM-AJAY GIA ₹50,000 + MUDRA loan guidance
 - One-page PDF business proposal generation
+
+### Advanced Governance & Post-Course System
+
+Three additive features on top of the existing flow. **Nothing legacy was replaced** — every
+pre-existing screen, endpoint and fallback path still works and remains the default whenever a
+new gate is not satisfied.
+
+**F1 · Voice-Based Grievance Redressal (whistleblowing engine)**
+- Prominent "Report Issue" microphone on the beneficiary dashboard; the typed complaint form
+  (issue-type dropdown + free text) is the **default** capture path and the mic is an alternative
+  dictation route that feeds the same field via ASR
+- Every ticket is auto-tagged with beneficiary ID, active district and assigned training centre
+  (`buildGrievanceMetadata` in `src/services/governance.ts`)
+- `POST /api/grievances`, `GET /api/grievances`, `GET /api/grievances/summary`,
+  `POST /api/grievances/:id/status`, backed by an in-memory ledger that mirrors the QR token store
+- Forwarded to the in-app **Ministry Monitoring Dashboard** (Header 🏛️ button). External portal
+  forwarding stays behind the `GOVERNMENT_PORTAL_URL` flag while the portal is in development
+- Offline complaints queue locally and flush on reconnection
+
+**F2 · Automated Lifecycle Nudges via WhatsApp (Twilio)**
+- Enrollment timestamp recorded on the "Enroll" click (`server/services/lifecycleScheduler.ts`)
+- **Day 45** check-in and **Day 90** completion nudges, fired by a tick-based scheduler
+  (`LIFECYCLE_SWEEP_INTERVAL_MS`, default 60s). `POST /api/lifecycle/sweep` forces a pass for demos
+- Inbound Day-45 replies arrive at `POST /api/whatsapp/inbound` and route straight back to the
+  beneficiary's profile stream — visible in their own dashboard inbox and in the Ministry
+  dashboard's conversation view (`GET /api/lifecycle`)
+- `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_WHATSAPP_FROM` are **optional** — the server
+  boots and runs without them and sends degrade to a logged, retryable no-op
+
+**F3 · Post-Course AI Guidance (second conversation loop)**
+- `AadhaarSession.courseCompleted` + nullable `completedAt`, set by the dashboard's
+  "Complete Training" button and persisted per beneficiary
+- The `post-training-guidance` screen opens automatically on Day 90+ login. Everyone else stays on
+  the legacy `beneficiary-dashboard`; the screen itself also guards against a null `completedAt`
+- **Path A** — certified trade auto-populated into the existing PM-AJAY ₹50,000 proposal PDF plus a
+  BDO physical-submission checklist
+- **Path B** — `GET /api/post-training/jobs` filters the district registry by the beneficiary's
+  `qpCode` and district; certified matches rank first
+- **Path C** — step-by-step PM MUDRA loan (up to ₹10 lakh) guidance
+- The original `micro-finance` screen stays reachable from the new screen as a legacy fallback
 
 ## 📁 Project Structure
 
@@ -76,9 +146,15 @@ ajay-vani-mobile/
 │   ├── data/
 │   │   ├── nsqfPacks.ts    # 6 NSQF qualification packs with keywords & demand scores
 │   │   └── districtJobs.ts # District market registry (centers, ODOP, vacancies)
+│   ├── services/
+│   │   ├── grievanceLedger.ts     # F1 grievance ticket ledger + summary aggregation
+│   │   ├── lifecycleScheduler.ts  # F2 enrollment store, Day-45/90 scheduler, replies
+│   │   ├── whatsapp.ts            # Twilio WhatsApp sender (optional credentials)
+│   │   └── postTraining.ts        # F3 completion ledger, Day-90 gate, job queries
 │   └── index.ts            # API routes + heuristic transcript analyzer
 ├── src/
 │   ├── components/
+│   │   ├── Governance/     # GrievanceReporter, LifecycleNudgePanel
 │   │   ├── Layout/         # MobileContainer, Header, OfflineBanner
 │   │   └── Modals/         # PrivacyPolicyModal, TermsModal
 │   ├── context/
@@ -89,10 +165,18 @@ ajay-vani-mobile/
 │   │   ├── NSQFProfileScreen.tsx
 │   │   ├── SkillingJobsScreen.tsx
 │   │   ├── MicroFinanceScreen.tsx
+│   │   ├── PostTrainingGuidanceScreen.tsx  # F3 second conversation loop
+│   │   ├── MinistryDashboardScreen.tsx     # F1 grievance destination
 │   │   └── OfflineSyncScreen.tsx
 │   ├── services/
-│   │   ├── api.ts          # Backend API calls
-│   │   └── offlineStorage.ts # IndexedDB operations
+│   │   ├── api.ts              # Backend API calls
+│   │   ├── audioCapture.ts     # Silero VAD + WebRTC MediaRecorder
+│   │   ├── speech.ts           # ASR/TTS orchestrator (Bhashini + local ONNX)
+│   │   ├── governance.ts       # F1/F2/F3 pure helpers + Day-90 gating
+│   │   ├── modelPackManager.ts # Pack manifest + state machine
+│   │   ├── packDownloader.ts   # Download with resume + sha256 verification
+│   │   ├── offlineStorage.ts   # IndexedDB operations
+│   │   └── translations.ts     # UI strings for all 9 languages
 │   ├── types/
 │   │   └── index.ts        # TypeScript interfaces
 │   ├── App.tsx             # Root component + screen router
@@ -144,6 +228,30 @@ npm run start
 | `POST` | `/api/sync/offline` | Batch sync offline interview records |
 | `GET` | `/api/district-data` | Get skilling centers & market data for a district |
 | `GET` | `/api/health` | Service health check |
+| `POST` | `/api/grievances` | **F1** Create a grievance ticket (auto-tagged, forwarded to Ministry dashboard) |
+| `GET` | `/api/grievances` | **F1** List tickets (`?status=`, `?district=`) |
+| `GET` | `/api/grievances/summary` | **F1** Aggregated counts by status, issue type, district |
+| `POST` | `/api/grievances/:id/status` | **F1** Move a ticket to `in-review` / `resolved` |
+| `POST` | `/api/lifecycle/enroll` | **F2** Record the Enroll timestamp for WhatsApp nudges |
+| `GET` | `/api/lifecycle` | **F2** All enrolled profiles with their WhatsApp threads |
+| `GET` | `/api/lifecycle/:beneficiaryId` | **F2** Enrollment + message thread for a profile inbox |
+| `POST` | `/api/lifecycle/sweep` | **F2** Force a scheduler pass now (demo control) |
+| `POST` | `/api/whatsapp/inbound` | **F2** Twilio inbound webhook — replies route to the profile stream |
+| `POST` | `/api/course/complete` | **F3** Record training completion (`completedAt`) |
+| `GET` | `/api/post-training/jobs` | **F3** Local employers for a district + NSQF code |
+
+### Environment Configuration
+
+Copy `.env.example` to `.env`. Everything except the Bhashini keys is optional — the server boots
+and degrades gracefully when they are unset.
+
+| Variable | Required | Purpose |
+|----------|----------|---------|
+| `BHASHINI_USER_ID` / `BHASHINI_ULCA_API_KEY` / `BHASHINI_INFERENCE_KEY` | For online ASR/TTS | Bhashini ASR + TTS proxy |
+| `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_WHATSAPP_FROM` | For F2 sends | WhatsApp nudges; unset = dry mode |
+| `LIFECYCLE_SWEEP_INTERVAL_MS` | No | Scheduler cadence (default 60000) |
+| `GOVERNMENT_PORTAL_URL` | No | External grievance portal; unset = Ministry dashboard only |
+
 
 ### Request/Response Example
 

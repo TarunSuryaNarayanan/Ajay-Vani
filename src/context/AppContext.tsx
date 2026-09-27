@@ -1,7 +1,30 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { LanguageCode, VoiceProcessResult, ScreenType, OfflineInterview, AadhaarSession } from '../types';
+import {
+  LanguageCode,
+  VoiceProcessResult,
+  ScreenType,
+  OfflineInterview,
+  AadhaarSession,
+  QRToken,
+  GrievanceIssueType,
+  GrievanceTicket,
+  LifecycleEnrollment,
+  GrievanceStatus,
+} from '../types';
 import { offlineStorage } from '../services/offlineStorage';
-import { syncOfflineInterviews } from '../services/api';
+import {
+  syncOfflineInterviews,
+  submitGrievance,
+  enrollForLifecycleNudges,
+  fetchLifecycleEnrollment,
+  triggerLifecycleSweep,
+  markCourseComplete,
+  fetchGrievances,
+  updateGrievanceStatus,
+} from '../services/api';
+import { buildGrievanceMetadata, isPostTrainingEligible, landingScreenFor, simulateDay90Window } from '../services/governance';
+
+const PENDING_GRIEVANCES_KEY = 'pending_grievances';
 
 interface AppContextType {
   currentScreen: ScreenType;
@@ -20,11 +43,18 @@ interface AppContextType {
   aadhaarNumber: string;
   isAadhaarLoggedIn: boolean;
   aadhaarSession: AadhaarSession | null;
+  qrToken: QRToken | null;
+  grievanceTickets: GrievanceTicket[];
+  pendingGrievanceCount: number;
+  lifecycleEnrollment: LifecycleEnrollment | null;
+  whatsappConfigured: boolean;
   setScreen: (screen: ScreenType) => void;
   setLanguage: (lang: LanguageCode, name: string) => void;
   setDistrict: (district: string) => void;
   saveInterviewResult: (result: VoiceProcessResult, transcript: string) => Promise<void>;
   triggerSync: () => Promise<void>;
+  generateQRToken: () => Promise<QRToken | undefined>;
+  admitToCourse: (tokenId: string) => Promise<{ success: boolean; message: string }>;
   setPrivacyOpen: (open: boolean) => void;
   setTermsOpen: (open: boolean) => void;
   resetToHome: () => void;
@@ -32,6 +62,21 @@ interface AppContextType {
   verifyAadhaarOtp: (otp: string) => boolean;
   loginDemoBeneficiary: () => void;
   logoutAadhaar: () => void;
+  // ─── Advanced Governance (F1 / F2 / F3) ───────────────────────────────────
+  reportGrievance: (input: {
+    issueType: GrievanceIssueType;
+    description: string;
+    captureMode: 'form' | 'voice';
+  }) => Promise<{ success: boolean; message: string; queuedOffline?: boolean }>;
+  refreshGrievances: () => Promise<void>;
+  setGrievanceStatus: (ticketId: string, status: GrievanceStatus, note?: string) => Promise<boolean>;
+  enrollForNudges: (whatsappNumber: string) => Promise<{ success: boolean; message: string }>;
+  refreshLifecycleInbox: () => Promise<void>;
+  runLifecycleSweepNow: () => Promise<number>;
+  completeCourse: () => Promise<{ success: boolean; message: string }>;
+  simulatePostTrainingWindow: () => Promise<void>;
+  resetGovernanceState: () => void;
+  isPostTrainingUnlocked: boolean;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -56,11 +101,232 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [isAadhaarLoggedIn, setIsAadhaarLoggedIn] = useState<boolean>(false);
   const [aadhaarSession, setAadhaarSession] = useState<AadhaarSession | null>(null);
 
+  // QR Token for paperless offline enrollment (Fix #8)
+  const [qrToken, setQrToken] = useState<QRToken | null>(null);
+
+  // ─── Advanced Governance state (F1 grievances, F2 lifecycle, F3 completion) ──
+  const [grievanceTickets, setGrievanceTickets] = useState<GrievanceTicket[]>([]);
+  const [pendingGrievanceCount, setPendingGrievanceCount] = useState<number>(0);
+  const [lifecycleEnrollment, setLifecycleEnrollment] = useState<LifecycleEnrollment | null>(null);
+  const [whatsappConfigured, setWhatsappConfigured] = useState<boolean>(false);
+
+  const isPostTrainingUnlocked = isPostTrainingEligible(aadhaarSession);
+
+  // QR Token Functions (Fix #8)
+  const generateQRToken = async () => {
+    if (!currentResult || !aadhaarSession) return;
+
+    const tokenId = `tkt_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    const token: QRToken = {
+      tokenId,
+      beneficiaryName: aadhaarSession.beneficiaryName || currentResult.profile.beneficiaryName,
+      aadhaarMasked: aadhaarSession.maskedAadhaar || 'XXXX XXXX 7777',
+      nsqfQpCode: currentResult.recommendedNSQF.qpCode,
+      nsqfRoleNameHi: currentResult.recommendedNSQF.roleNameHi,
+      district: aadhaarSession.district || selectedDistrict,
+      generatedAt: Date.now(),
+      isUsed: false,
+    };
+
+    setQrToken(token);
+
+    try {
+      const { generateQRToken: genQR } = await import('../services/api');
+      await genQR(
+        token.beneficiaryName,
+        token.aadhaarMasked,
+        token.nsqfQpCode,
+        token.nsqfRoleNameHi,
+        token.district
+      );
+    } catch (e) {
+      console.warn('[QR Token] Could not persist to server:', e);
+    }
+
+    return token;
+  };
+
+  const admitToCourse = async (tokenId: string): Promise<{ success: boolean; message: string }> => {
+    try {
+      const { admitToCourse: admit } = await import('../services/api');
+      const result = await admit(tokenId);
+      if (result.success && qrToken && qrToken.tokenId === tokenId) {
+        setQrToken({ ...qrToken, isUsed: true });
+      }
+      return result;
+    } catch (e: any) {
+      return { success: false, message: e.message || 'Admission failed' };
+    }
+  };
+
+  // ─── F1 · Grievance Redressal ──────────────────────────────────────────────
+
+  const readPendingGrievances = (): Array<Parameters<typeof submitGrievance>[0]> => {
+    try {
+      const raw = localStorage.getItem(PENDING_GRIEVANCES_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const writePendingGrievances = (items: Array<Parameters<typeof submitGrievance>[0]>) => {
+    try {
+      localStorage.setItem(PENDING_GRIEVANCES_KEY, JSON.stringify(items));
+    } catch (e) {
+      console.warn('[Grievance] Could not persist offline queue:', e);
+    }
+    setPendingGrievanceCount(items.length);
+  };
+
+  const refreshGrievances = async () => {
+    if (!isOnline) return;
+    try {
+      const tickets = await fetchGrievances();
+      setGrievanceTickets(tickets);
+    } catch (e) {
+      console.warn('[Grievance] Could not load tickets:', e);
+    }
+  };
+
+  // Offline grievances are queued locally and flushed as soon as connectivity returns.
+  const flushPendingGrievances = async () => {
+    const queued = readPendingGrievances();
+    if (queued.length === 0) return;
+    const remaining: typeof queued = [];
+    for (const item of queued) {
+      const result = await submitGrievance(item);
+      if (!result.success) remaining.push(item);
+    }
+    writePendingGrievances(remaining);
+    if (remaining.length < queued.length) {
+      await refreshGrievances();
+    }
+  };
+
+  const reportGrievance = async (input: {
+    issueType: GrievanceIssueType;
+    description: string;
+    captureMode: 'form' | 'voice';
+  }): Promise<{ success: boolean; message: string; queuedOffline?: boolean }> => {
+    const metadata = buildGrievanceMetadata({ session: aadhaarSession, result: currentResult, selectedDistrict });
+    const payload = {
+      issueType: input.issueType,
+      description: input.description,
+      captureMode: input.captureMode,
+      language: selectedLanguage,
+      metadata,
+    };
+
+    if (!isOnline) {
+      writePendingGrievances([...readPendingGrievances(), payload]);
+      return {
+        success: true,
+        queuedOffline: true,
+        message: 'ऑफलाइन सहेजा गया। कनेक्शन मिलते ही मंत्रालय डैशबोर्ड पर भेजा जाएगा।',
+      };
+    }
+
+    const result = await submitGrievance(payload);
+    if (result.success) {
+      setGrievanceTickets((prev) => (result.ticket ? [result.ticket as GrievanceTicket, ...prev] : prev));
+      return { success: true, message: result.message };
+    }
+
+    // Network hiccup mid-request: keep it queued rather than losing the complaint.
+    writePendingGrievances([...readPendingGrievances(), payload]);
+    return {
+      success: true,
+      queuedOffline: true,
+      message: 'सर्वर से संपर्क नहीं हो सका। शिकायत सुरक्षित रख ली गई है और बाद में भेज दी जाएगी।',
+    };
+  };
+
+  const setGrievanceStatus = async (ticketId: string, status: GrievanceStatus, note?: string) => {
+    const result = await updateGrievanceStatus(ticketId, status, note);
+    if (result.success && result.ticket) {
+      setGrievanceTickets((prev) => prev.map((t) => (t.ticketId === ticketId ? result.ticket as GrievanceTicket : t)));
+    }
+    return result.success;
+  };
+
+  // ─── F2 · Lifecycle Nudges ─────────────────────────────────────────────────
+
+  const refreshLifecycleInbox = async () => {
+    if (!aadhaarSession) return;
+    const { enrollment, whatsappConfigured: configured } = await fetchLifecycleEnrollment(aadhaarSession.aadhaarNumber);
+    setLifecycleEnrollment(enrollment);
+    setWhatsappConfigured(configured);
+  };
+
+  const enrollForNudges = async (whatsappNumber: string) => {
+    if (!aadhaarSession) {
+      return { success: false, message: 'पहले लॉगिन करें।' };
+    }
+    const result = await enrollForLifecycleNudges({
+      beneficiaryId: aadhaarSession.aadhaarNumber,
+      beneficiaryName: aadhaarSession.beneficiaryName,
+      district: aadhaarSession.district || selectedDistrict,
+      whatsappNumber,
+    });
+    if (result.success) {
+      const enrolledAt = result.enrollment?.enrolledAt ?? Date.now();
+      setAadhaarSession((prev) => (prev ? { ...prev, lifecycleEnrolledAt: enrolledAt, whatsappNumber } : prev));
+      setLifecycleEnrollment(result.enrollment ?? null);
+      setWhatsappConfigured(!!result.whatsappConfigured);
+      return { success: true, message: result.message };
+    }
+    return result;
+  };
+
+  const runLifecycleSweepNow = async () => {
+    const { dispatchedCount, whatsappConfigured: configured } = await triggerLifecycleSweep();
+    setWhatsappConfigured(configured);
+    await refreshLifecycleInbox();
+    return dispatchedCount;
+  };
+
+  // ─── F3 · Post-Course AI Guidance ──────────────────────────────────────────
+
+  const completeCourse = async () => {
+    if (!aadhaarSession) {
+      return { success: false, message: 'पहले लॉगिन करें।' };
+    }
+    const completedAt = Date.now();
+    setAadhaarSession((prev) => (prev ? { ...prev, courseCompleted: true, completedAt } : prev));
+    persistCourseCompletion(aadhaarSession.aadhaarNumber, completedAt);
+    if (isOnline) {
+      await markCourseComplete({
+        beneficiaryId: aadhaarSession.aadhaarNumber,
+        nsqfQpCode: currentResult?.recommendedNSQF.qpCode || '',
+        district: aadhaarSession.district || selectedDistrict,
+        completedAt,
+      });
+    }
+    return { success: true, message: 'प्रशिक्षण पूर्ण दर्ज हो गया।' };
+  };
+
+  const simulatePostTrainingWindow = async () => {
+    if (!aadhaarSession) return;
+    const completedAt = simulateDay90Window(aadhaarSession.completedAt);
+    setAadhaarSession((prev) => (prev ? { ...prev, courseCompleted: true, completedAt } : prev));
+    persistCourseCompletion(aadhaarSession.aadhaarNumber, completedAt);
+    if (isOnline) {
+      await markCourseComplete({
+        beneficiaryId: aadhaarSession.aadhaarNumber,
+        nsqfQpCode: currentResult?.recommendedNSQF.qpCode || '',
+        district: aadhaarSession.district || selectedDistrict,
+        completedAt,
+      });
+    }
+  };
+
   // Monitor network connectivity per Developer Guide §3 Screen 6
   useEffect(() => {
     const handleOnline = () => {
       setIsOnline(true);
       triggerSync();
+      flushPendingGrievances();
     };
 
     const handleOffline = () => {
@@ -72,6 +338,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     // Initial check of unsynced items
     refreshUnsyncedCount();
+    setPendingGrievanceCount(readPendingGrievances().length);
+    // Complaints queued during a previous offline session still go out on launch.
+    if (isOnline) {
+      flushPendingGrievances();
+    }
 
     return () => {
       window.removeEventListener('online', handleOnline);
@@ -160,7 +431,63 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const resetToHome = () => {
     setCurrentResult(null);
     setRawTranscript('');
+    setQrToken(null);
     setCurrentScreen('language-select');
+  };
+
+  // Course completion survives logout/login so the Day-90 loop can be re-entered
+  // exactly the way a post-training beneficiary experiences it.
+  const COURSE_COMPLETION_KEY = 'course_completion';
+
+  const readCourseCompletion = (aadhaar: string): { courseCompleted: boolean; completedAt: number | null } => {
+    try {
+      const raw = localStorage.getItem(`${COURSE_COMPLETION_KEY}_${aadhaar}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (typeof parsed?.completedAt === 'number') {
+          return { courseCompleted: true, completedAt: parsed.completedAt };
+        }
+      }
+    } catch (e) {
+      console.warn('[Post-Training] Could not read stored completion:', e);
+    }
+    return { courseCompleted: false, completedAt: null };
+  };
+
+  const persistCourseCompletion = (aadhaar: string, completedAt: number) => {
+    try {
+      localStorage.setItem(`${COURSE_COMPLETION_KEY}_${aadhaar}`, JSON.stringify({ completedAt }));
+    } catch (e) {
+      console.warn('[Post-Training] Could not persist completion:', e);
+    }
+  };
+
+  /**
+   * Clears locally-held governance state so a demo run can start from the
+   * pre-training state again. Server-side ledgers are untouched — the grievance
+   * and nudge history stay visible on the Ministry dashboard.
+   */
+  const resetGovernanceState = () => {
+    if (aadhaarSession) {
+      try {
+        localStorage.removeItem(`${COURSE_COMPLETION_KEY}_${aadhaarSession.aadhaarNumber}`);
+      } catch (e) {
+        console.warn('[Post-Training] Could not clear stored completion:', e);
+      }
+      setAadhaarSession((prev) =>
+        prev
+          ? { ...prev, courseCompleted: false, completedAt: null, lifecycleEnrolledAt: null, whatsappNumber: null }
+          : prev
+      );
+    }
+    setLifecycleEnrollment(null);
+    writePendingGrievances([]);
+  };
+
+  const establishSession = (session: AadhaarSession) => {    setAadhaarSession(session);
+    setIsAadhaarLoggedIn(true);
+    // Additive gate: only certified Day-90+ beneficiaries skip the legacy dashboard.
+    setCurrentScreen(landingScreenFor(session));
   };
 
   // Aadhaar Login Handlers
@@ -175,7 +502,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (otp === '1234' || otp.length === 4) {
       const cleanAadhaar = aadhaarNumber || '999988887777';
       const last4 = cleanAadhaar.slice(-4) || '7777';
-      
+      const completion = readCourseCompletion(cleanAadhaar);
+
       const session: AadhaarSession = {
         aadhaarNumber: cleanAadhaar,
         maskedAadhaar: `XXXX XXXX ${last4}`,
@@ -185,12 +513,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         district: selectedDistrict || "Varanasi",
         grantStep: 3, // BDO Approval Pending
         stipendDaysAttended: 30,
-        stipendTotalEarned: 4500
+        stipendTotalEarned: 4500,
+        courseCompleted: completion.courseCompleted,
+        completedAt: completion.completedAt,
+        lifecycleEnrolledAt: null,
+        whatsappNumber: null
       };
 
-      setAadhaarSession(session);
-      setIsAadhaarLoggedIn(true);
-      setCurrentScreen('beneficiary-dashboard');
+      establishSession(session);
       return true;
     }
     return false;
@@ -198,6 +528,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const loginDemoBeneficiary = () => {
     setAadhaarNumber('999988887777');
+    const completion = readCourseCompletion('999988887777');
     const session: AadhaarSession = {
       aadhaarNumber: '999988887777',
       maskedAadhaar: 'XXXX XXXX 7777',
@@ -207,18 +538,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       district: selectedDistrict || "Varanasi",
       grantStep: 3, // BDO Clearance Pending
       stipendDaysAttended: 30,
-      stipendTotalEarned: 4500
+      stipendTotalEarned: 4500,
+      courseCompleted: completion.courseCompleted,
+      completedAt: completion.completedAt,
+      lifecycleEnrolledAt: null,
+      whatsappNumber: null
     };
 
-    setAadhaarSession(session);
-    setIsAadhaarLoggedIn(true);
-    setCurrentScreen('beneficiary-dashboard');
+    establishSession(session);
   };
 
   const logoutAadhaar = () => {
     setIsAadhaarLoggedIn(false);
     setAadhaarSession(null);
     setAadhaarNumber('');
+    setLifecycleEnrollment(null);
     setCurrentScreen('aadhaar-login');
   };
 
@@ -246,13 +580,30 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setDistrict,
         saveInterviewResult,
         triggerSync,
+        qrToken,
+        generateQRToken,
+        admitToCourse,
         setPrivacyOpen,
         setTermsOpen,
         resetToHome,
         submitAadhaarNumber,
         verifyAadhaarOtp,
         loginDemoBeneficiary,
-        logoutAadhaar
+        logoutAadhaar,
+        grievanceTickets,
+        pendingGrievanceCount,
+        lifecycleEnrollment,
+        whatsappConfigured,
+        reportGrievance,
+        refreshGrievances,
+        setGrievanceStatus,
+        enrollForNudges,
+        refreshLifecycleInbox,
+        runLifecycleSweepNow,
+        completeCourse,
+        simulatePostTrainingWindow,
+        resetGovernanceState,
+        isPostTrainingUnlocked
       }}
     >
       {children}

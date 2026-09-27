@@ -23,7 +23,7 @@ export const NSQF_PACKS: NSQFPack[] = [
       "Varanasi": 92,
       "Gorakhpur": 88,
       "Patna": 90,
-      "Bundelkhand": 95,
+      "Jhansi": 95,
       "Default": 89
     },
     description: "Installation and maintenance of rooftop and agricultural solar pump systems.",

@@ -1,8 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { DialectOption, LanguageCode } from '../types';
 import { SpeakerIcon } from '../components/Icons';
 import { speechService } from '../services/speech';
+import { getUiText } from '../services/translations';
+import { packDownloader } from '../services/packDownloader';
+import { packStateManager, PackState } from '../services/modelPackManager';
 
 const DIALECT_OPTIONS: DialectOption[] = [
   {
@@ -71,8 +74,25 @@ const DIALECT_OPTIONS: DialectOption[] = [
 ];
 
 export const LanguageSelectionScreen: React.FC = () => {
-  const { setLanguage, setScreen, setPrivacyOpen, setTermsOpen } = useApp();
+  const { setLanguage, setScreen, selectedLanguage, setPrivacyOpen, setTermsOpen } = useApp();
   const [playingCode, setPlayingCode] = useState<LanguageCode | null>(null);
+  const [packState, setPackState] = useState<PackState>('not_downloaded');
+
+  useEffect(() => {
+    if (selectedLanguage) {
+      const state = packStateManager.getState(selectedLanguage);
+      setPackState(state);
+      const unsub = packStateManager.subscribe((rec) => {
+        if (rec.state === 'downloading' || rec.state === 'ready' || rec.state === 'failed') {
+          setPackState(rec.state);
+        }
+      });
+      return unsub;
+    }
+  }, [selectedLanguage]);
+
+  const uiText = getUiText(selectedLanguage || 'hi-IN', 'selectLanguage');
+  const subtitle = getUiText(selectedLanguage || 'hi-IN', 'subtitle');
 
   const handlePreviewAudio = (e: React.MouseEvent, dialect: DialectOption) => {
     e.stopPropagation();
@@ -87,13 +107,25 @@ export const LanguageSelectionScreen: React.FC = () => {
       dialect.sampleGreeting,
       dialect.code,
       undefined,
-      () => setPlayingCode(null)
+      () => setPlayingCode(null),
+      (err) => console.warn('[LanguageSelection] TTS preview error:', err)
     );
   };
 
   const handleSelectDialect = (dialect: DialectOption) => {
     speechService.stopSpeaking();
     setLanguage(dialect.code, dialect.nativeName);
+
+    const pack = packStateManager.getRecord(dialect.code);
+    const isUnavailable = pack.state === 'unavailable';
+
+    if (!isUnavailable && pack.state !== 'ready') {
+      packDownloader.downloadPack(dialect.code, 'tiny', {
+        onProgress: (_p) => {
+        },
+      });
+    }
+
     setScreen('voice-chat');
   };
 
@@ -102,12 +134,12 @@ export const LanguageSelectionScreen: React.FC = () => {
       <div>
         {/* Screen Title */}
         <div className="mb-6">
-          <h1 className="font-display text-ink text-2xl mb-1">
-            अपनी भाषा चुनें
-          </h1>
-          <p className="font-body text-ink-muted text-base">
-            बातचीत करने के लिए अपनी मातृभाषा या बोली पर टैप करें।
-          </p>
+            <h1 className="font-display text-ink text-2xl mb-1">
+              {uiText}
+            </h1>
+            <p className="font-body text-ink-muted text-base">
+              {subtitle}
+            </p>
         </div>
 
         {/* Dialect Tiles Grid */}

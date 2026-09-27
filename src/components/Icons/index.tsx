@@ -196,3 +196,42 @@ export const BriefcaseIcon: React.FC<IconProps> = ({ className = "w-5 h-5", size
     <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
   </svg>
 );
+
+export const SearchIcon: React.FC<IconProps> = ({ className = "w-5 h-5", size, color = "currentColor" }) => (
+  <svg 
+    xmlns="http://www.w3.org/2000/svg" 
+    viewBox="0 0 24 24" 
+    fill="none" 
+    stroke={color} 
+    strokeWidth="2" 
+    strokeLinecap="round" 
+    strokeLinejoin="round" 
+    className={className}
+    style={size ? { width: size, height: size } : undefined}
+  >
+    <circle cx="11" cy="11" r="8" />
+    <line x1="21" y1="21" x2="15.636" y2="15.636" />
+    <line x1="11" y1="8" x2="11" y2="14" />
+    <line x1="8" y1="11" x2="14" y2="11" />
+  </svg>
+);
+
+export const QRCodeIcon: React.FC<IconProps> = ({ className = "w-5 h-5", size, color = "currentColor" }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke={color}
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+    style={size ? { width: size, height: size } : undefined}
+  >
+    <rect x="2" y="2" width="5" height="5" rx="1" />
+    <rect x="17" y="2" width="5" height="5" rx="1" />
+    <path d="M2 17h5v5H2zM17 17h5v5h-5z" />
+    <circle cx="12" cy="12" r="2.5" />
+    <path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22" />
+  </svg>
+);

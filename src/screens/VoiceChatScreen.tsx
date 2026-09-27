@@ -4,22 +4,26 @@ import { GramSahayakAvatar } from '../components/Avatar/GramSahayakAvatar';
 import { MicIcon, SpeakerIcon, AlertIcon } from '../components/Icons';
 import { speechService } from '../services/speech';
 import { WaveformVisualizer } from '../services/audioWaveform';
-import { processVoiceTranscript } from '../services/api';
+import { processVoiceTranscript, localFallbackProcess } from '../services/api';
+import { getUiText } from '../services/translations';
+import { LanguageCode } from '../types';
+import { packStateManager } from '../services/modelPackManager';
 
 const DISTRICTS = [
   { id: 'Varanasi', name: 'वाराणसी (Varanasi, UP)' },
   { id: 'Gorakhpur', name: 'गोरखपुर (Gorakhpur, UP)' },
-  { id: 'Bundelkhand', name: 'झांसी / बुंदेलखंड (Jhansi, UP)' },
+  { id: 'Jhansi', name: 'झांसी (Jhansi, UP)' },
   { id: 'Patna', name: 'पटना (Patna, Bihar)' }
 ];
 
 export const VoiceChatScreen: React.FC = () => {
   const { 
-    selectedLanguage, 
+    selectedLanguage,
     selectedDistrict, 
     setDistrict, 
     saveInterviewResult, 
-    setScreen 
+    setScreen,
+    isOnline
   } = useApp();
 
   const [isRecording, setIsRecording] = useState(false);
@@ -29,34 +33,54 @@ export const VoiceChatScreen: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [spokenPrompt, setSpokenPrompt] = useState('आपको किस काम का अनुभव है? आप क्या नया काम शुरू करना चाहते हैं?');
   const [lastAIResponse, setLastAIResponse] = useState<string | null>(null);
+  const [packState] = useState(() => packStateManager.getState(selectedLanguage || 'hi-IN'));
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const waveformRef = useRef<WaveformVisualizer | null>(null);
 
-  // Initial welcome greeting when screen loads
+  const DISTRICT_AUDIO_PROMPT = "नमस्ते! कृपया स्क्रीन पर दिए गए सूची से अपना ज़िला (district) चुनें।";
+    // Initial welcome greeting when screen loads
   useEffect(() => {
     waveformRef.current = new WaveformVisualizer();
 
-    const welcomeGreeting = selectedLanguage.includes('bho')
+    const welcomeGreeting = selectedLanguage === 'ta-IN'
+      ? 'வணக்கம்! நான் உங்கள் பிஎம்-அஜய் கிராம உதவியாளர். எந்த வேலை கற்க விரும்புகிறீர்கள்?'
+      : selectedLanguage === 'te-IN'
+      ? 'నమస్కారం! నేను మీ పిఎం-అజయ్ గ్రామ సహాయకుడిని. మీరు ఏ పని నేర్చుకోవాలి?'
+      : selectedLanguage === 'mr-IN'
+      ? 'नमस्कार! मी तुमचा पीएम-अजय ग्राम सहाय्यक आहे. तुम्हाला कोणत्या कामाचा अनुभव आहे?'
+      : selectedLanguage === 'bn-IN'
+      ? 'নমস্কার! আমি আপনার পিএম-অজয় গ্রাম সহায়ক। আপনি কোন কাজ শিখতে চান?'
+      : selectedLanguage.includes('bho')
       ? 'राम राम भाई! हम आपके ग्राम सहायक बानी। रउवा कवन काम के अनुभव बा? खुल के बोलीं।'
       : selectedLanguage.includes('bun')
       ? 'राम राम भइया! हम आपके ग्राम सहायक हैं। आप बताओ कौन सो काम सीखवे की इच्छा है?'
-      : 'नमस्ते! मैं आपका पीएम-अजय ग्राम सहायक हूँ। आपको किस काम का अनुभव है? बेझिझक बताएं।';
+      : selectedLanguage.includes('chg')
+      ? 'जय जोहार संगी! मैं तोर ग्राम सहायक आंव। तंय कोन काम सीखे बर चाहत हस?'
+      : selectedLanguage.includes('mai')
+      ? 'प्रणाम! हम अहांक ग्राम सहायक छी। अहां कोन काज मे आगां बढ़य चाहैत छी?'
+      : 'नमस्ते! मैं आपका पीएम-अजय ग्राम सहायक हूँ। आपको किस काम का अनुभव है? बेझिझक बोलें।';
 
     setSpokenPrompt(welcomeGreeting);
 
-    // Give a short gentle audio prompt
-    const timer = setTimeout(() => {
+    const districtTimer = setTimeout(() => {
       speechService.speak(
-        welcomeGreeting, 
+        DISTRICT_AUDIO_PROMPT,
         selectedLanguage,
-        () => setIsSpeaking(true),
-        () => setIsSpeaking(false)
+        () => {},
+        () => {
+          speechService.speak(
+            welcomeGreeting,
+            selectedLanguage,
+            () => setIsSpeaking(true),
+            () => setIsSpeaking(false)
+          );
+        }
       );
-    }, 600);
+    }, 300);
 
     return () => {
-      clearTimeout(timer);
+      clearTimeout(districtTimer);
       speechService.stopSpeaking();
       speechService.stopListening();
       if (waveformRef.current) {
@@ -123,10 +147,8 @@ export const VoiceChatScreen: React.FC = () => {
     if (waveformRef.current) {
       waveformRef.current.stop();
     }
-
-    if (transcript.trim().length > 3) {
-      handleSpeechCompleted(transcript);
-    }
+    // ASR result arrives via onResult callback in handleStartRecord
+    // which calls handleSpeechCompleted when isFinal is true
   };
 
 
@@ -137,8 +159,8 @@ export const VoiceChatScreen: React.FC = () => {
       waveformRef.current.stop();
     }
 
-    if (!spokenText || spokenText.trim().length < 2) {
-      setErrorMessage("कोई आवाज सुनाई नहीं दी। कृपया बटन दबाकर दोबारा बोलें।");
+      if (!spokenText || spokenText.trim().length < 2) {
+      setErrorMessage(uiTexts.noAudio);
       return;
     }
 
@@ -169,7 +191,24 @@ export const VoiceChatScreen: React.FC = () => {
         }
       );
     } catch (err: any) {
-      setErrorMessage("सर्वर से उत्तर प्राप्त नहीं हुआ। कृपया दोबारा प्रयास करें।");
+      setErrorMessage(null);
+      try {
+        const fallbackResult = localFallbackProcess(spokenText, selectedDistrict, selectedLanguage);
+        setLastAIResponse(fallbackResult.friendlyAudioResponse);
+        setSpokenPrompt(fallbackResult.friendlyAudioResponse);
+        speechService.speak(
+          fallbackResult.friendlyAudioResponse,
+          selectedLanguage,
+          () => setIsSpeaking(true),
+          async () => {
+            setIsSpeaking(false);
+            await saveInterviewResult(fallbackResult, spokenText);
+            setScreen('nsqf-profile');
+          }
+        );
+      } catch (fallbackErr) {
+        setErrorMessage("सर्वर से उत्तर प्राप्त नहीं हुआ। कृपया दोबारा प्रयास करें।");
+      }
     } finally {
       setIsProcessing(false);
     }
@@ -192,12 +231,25 @@ export const VoiceChatScreen: React.FC = () => {
     handleSpeechCompleted(text);
   };
 
+  const uiTexts = {
+    districtLabel: getUiText(selectedLanguage as LanguageCode, 'districtLabel'),
+    tapToSpeak: getUiText(selectedLanguage as LanguageCode, 'tapToSpeak'),
+    listening: getUiText(selectedLanguage as LanguageCode, 'listening'),
+    processing: getUiText(selectedLanguage as LanguageCode, 'processing'),
+    transcriptLabel: getUiText(selectedLanguage as LanguageCode, 'transcriptLabel'),
+    transcriptPlaceholder: getUiText(selectedLanguage as LanguageCode, 'transcriptPlaceholder'),
+    samplePhrases: getUiText(selectedLanguage as LanguageCode, 'samplePhrases'),
+    replayAudio: getUiText(selectedLanguage as LanguageCode, 'replayAudio'),
+    stopRecording: getUiText(selectedLanguage as LanguageCode, 'stopRecording'),
+    noAudio: getUiText(selectedLanguage as LanguageCode, 'noAudioDetected'),
+  };
+
   return (
     <div className="flex-1 flex flex-col justify-between p-5 items-center text-center">
       {/* Top District Selector */}
       <div className="w-full flex items-center justify-between text-xs text-ink-muted mb-2">
         <label htmlFor="district-select" className="font-caption">
-          जिले का चयन करें:
+          {uiTexts.districtLabel}
         </label>
         <select
           id="district-select"
@@ -211,6 +263,13 @@ export const VoiceChatScreen: React.FC = () => {
             </option>
           ))}
         </select>
+      </div>
+
+      {/* Mode Indicator (E23) — Local vs Enhanced */}
+      <div className="flex items-center justify-center mb-2">
+        <span className={`mode-badge ${isOnline && packState !== 'ready' ? 'mode-enhanced' : packState === 'ready' ? 'mode-local' : 'mode-enhanced'}`}>
+          {isOnline && packState !== 'ready' ? 'Enhanced' : packState === 'ready' ? 'Local' : 'Enhanced'}
+        </span>
       </div>
 
       {/* Illustrated Gram Sahayak Avatar per design.md §5 */}
@@ -238,7 +297,7 @@ export const VoiceChatScreen: React.FC = () => {
         <button
           onClick={handleToggleRecord}
           disabled={isProcessing}
-          aria-label={isRecording ? "रिकॉर्डिंग रोकें" : "बोलने के लिए दबाएं"}
+           aria-label={isRecording ? uiTexts.stopRecording : uiTexts.tapToSpeak}
           className={`btn-mic ${isRecording ? 'recording' : ''} ${
             isProcessing ? 'opacity-60 cursor-wait' : 'hover:opacity-95'
           }`}
@@ -247,10 +306,10 @@ export const VoiceChatScreen: React.FC = () => {
         </button>
         <span className="font-caption text-ink font-semibold mt-3 text-sm">
           {isProcessing
-            ? "आवाज का विश्लेषण हो रहा है..."
-            : isRecording
-            ? "सुन रहे हैं, अपनी बात कहें (Tap to finish)"
-            : "बोलने के लिए दबाएं (Tap to Speak)"}
+             ? uiTexts.processing
+             : isRecording
+             ? uiTexts.listening
+             : uiTexts.tapToSpeak}
         </span>
       </div>
 
@@ -266,12 +325,12 @@ export const VoiceChatScreen: React.FC = () => {
 
       {/* Live Transcript Display Box */}
       <div className="w-full max-w-[420px] min-h-[64px] rounded-card border border-line bg-white/70 p-3 text-left">
-        <span className="font-caption text-xs text-ink-muted block mb-1">
-          पहचाने गए शब्द (Spoken Transcript):
-        </span>
-        <p className="text-sm sm:text-base text-ink italic leading-snug">
-          {transcript ? `"${transcript}"` : "माइक्रोफ़ोन पर टैप करके अपनी बात बोलें..."}
-        </p>
+         <span className="font-caption text-xs text-ink-muted block mb-1">
+           {uiTexts.transcriptLabel}
+         </span>
+         <p className="text-sm sm:text-base text-ink italic leading-snug">
+           {transcript ? `"${transcript}"` : uiTexts.transcriptPlaceholder}
+         </p>
       </div>
 
       {/* Error / Alert feedback */}
@@ -285,7 +344,7 @@ export const VoiceChatScreen: React.FC = () => {
       {/* Rural Sample Voice Prompts (Quick taps for testing/zero-typing) */}
       <div className="w-full max-w-[420px] mt-3 pt-3 border-t border-line text-left">
         <span className="font-caption text-xs text-ink-muted block mb-1.5 font-medium">
-          उदाहरण वाक्य (Tap to test):
+           {uiTexts.samplePhrases}
         </span>
         <div className="flex flex-col space-y-1.5">
           <button
