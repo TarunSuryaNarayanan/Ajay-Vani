@@ -1,10 +1,34 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
+import { viteStaticCopy } from 'vite-plugin-static-copy';
 
 export default defineConfig({
   plugins: [
     react(),
+
+    // Copy Silero VAD WASM/ONNX assets so they are served at the root path
+    // and accessible by the AudioWorklet in the browser.
+    viteStaticCopy({
+      targets: [
+        {
+          // Silero VAD AudioWorklet bundle
+          src: 'node_modules/@ricky0123/vad-web/dist/*.worklet.bundle.min.js',
+          dest: './',
+        },
+        {
+          // Silero VAD ONNX model
+          src: 'node_modules/@ricky0123/vad-web/dist/*.onnx',
+          dest: './',
+        },
+        {
+          // ONNX Runtime WebAssembly binaries
+          src: 'node_modules/onnxruntime-web/dist/*.wasm',
+          dest: './',
+        },
+      ],
+    }),
+
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'icons/*.png'],
@@ -37,7 +61,8 @@ export default defineConfig({
         ]
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        maximumFileSizeToCacheInBytes: 35 * 1024 * 1024, // 35 MB to allow precaching large ONNX & WASM binaries
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,wasm,onnx}'],
         runtimeCaching: [
           {
             urlPattern: ({ url }) => url.pathname.startsWith('/api/'),
@@ -77,5 +102,9 @@ export default defineConfig({
         changeOrigin: true,
       }
     }
-  }
+  },
+  // Ensure onnxruntime-web and vad-web WASM files are not inlined
+  optimizeDeps: {
+    exclude: ['@ricky0123/vad-web', 'onnxruntime-web'],
+  },
 });

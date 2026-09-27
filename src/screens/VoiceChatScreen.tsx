@@ -76,7 +76,7 @@ export const VoiceChatScreen: React.FC = () => {
     }
   };
 
-  const handleStartRecord = () => {
+  const handleStartRecord = async () => {
     setErrorMessage(null);
     setTranscript('');
     speechService.stopSpeaking();
@@ -86,9 +86,8 @@ export const VoiceChatScreen: React.FC = () => {
       waveformRef.current.start(canvasRef.current);
     }
 
-    setIsRecording(true);
-
-    speechService.startListening(
+    // VAD is now listening; isRecording becomes true when VAD detects speech
+    await speechService.startListening(
       selectedLanguage,
       (text: string, isFinal: boolean) => {
         setTranscript(text);
@@ -98,20 +97,29 @@ export const VoiceChatScreen: React.FC = () => {
       },
       (err: string) => {
         setErrorMessage(err);
-        handleStopRecord();
+        setIsRecording(false);
+        if (waveformRef.current) waveformRef.current.stop();
       },
       () => {
         setIsRecording(false);
-        if (waveformRef.current) {
-          waveformRef.current.stop();
+        if (waveformRef.current) waveformRef.current.stop();
+      },
+      // onSpeechStart: VAD fires this when it detects the user begins speaking
+      () => {
+        setIsRecording(true);
+        if (canvasRef.current && waveformRef.current) {
+          waveformRef.current.start(canvasRef.current);
         }
       }
     );
+
+    // Show "listening" state (VAD active but not yet speaking)
+    setIsRecording(true);
   };
 
-  const handleStopRecord = () => {
+  const handleStopRecord = async () => {
     setIsRecording(false);
-    speechService.stopListening();
+    await speechService.stopListening();
     if (waveformRef.current) {
       waveformRef.current.stop();
     }
@@ -120,6 +128,7 @@ export const VoiceChatScreen: React.FC = () => {
       handleSpeechCompleted(transcript);
     }
   };
+
 
   // Process Completed Speech Transcript
   const handleSpeechCompleted = async (spokenText: string) => {
@@ -167,9 +176,9 @@ export const VoiceChatScreen: React.FC = () => {
   };
 
   // Replay Last Spoken Audio
-  const handleReplayAudio = () => {
+  const handleReplayAudio = async () => {
     if (!spokenPrompt) return;
-    speechService.speak(
+    await speechService.speak(
       spokenPrompt,
       selectedLanguage,
       () => setIsSpeaking(true),

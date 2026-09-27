@@ -40,6 +40,8 @@ export interface SkillingCenter {
   name: string;
   nameHi: string;
   district: string;
+  latitude: number;
+  longitude: number;
   distanceKm: number;
   courseName: string;
   courseNameHi: string;
@@ -50,6 +52,8 @@ export interface SkillingCenter {
   coordinatorPhone: string;
   address: string;
   addressHi: string;
+  googleMapsUrl?: string;
+  pincode?: string;
 }
 
 export interface DistrictMarket {

@@ -4,13 +4,188 @@ import path from 'path';
 import { NSQF_PACKS, NSQFPack } from './data/nsqfPacks';
 import { DISTRICT_MARKET_REGISTRY, DistrictMarketData } from './data/districtJobs';
 
+// Load .env credentials for Bhashini
+import 'dotenv/config';
+
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 5000;
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10mb' })); // Allow large base64 audio payloads
 
-// NLP & Heuristic Classifier for Voice Transcripts
+// ─── Bhashini Configuration ───────────────────────────────────────────────────
+
+const BHASHINI_USER_ID = process.env.BHASHINI_USER_ID || '';
+const BHASHINI_ULCA_API_KEY = process.env.BHASHINI_ULCA_API_KEY || '';
+const BHASHINI_INFERENCE_KEY = process.env.BHASHINI_INFERENCE_KEY || '';
+const BHASHINI_PIPELINE_ID = '64392f96daac500b55c543cd';
+const BHASHINI_CONFIG_ENDPOINT = 'https://meity-auth.ulcacontrib.org/ulca/apis/v0/model/getModelsPipeline';
+const BHASHINI_COMPUTE_ENDPOINT = 'https://dhruva-api.bhashini.gov.in/services/inference/pipeline';
+
+// Map app LanguageCodes → Bhashini ISO-639 language codes
+function toBhashiniLang(lang: string): string {
+  if (lang.startsWith('ta')) return 'ta';
+  if (lang.startsWith('te')) return 'te';
+  if (lang.startsWith('mr')) return 'mr';
+  if (lang.startsWith('bn')) return 'bn';
+  if (lang.startsWith('mai')) return 'mai';
+  if (lang.startsWith('bho')) return 'bho';
+  // bun (Bundeli), chg (Chhattisgarhi) → Hindi (closest supported)
+  return 'hi';
+}
+
+// Cache serviceIds per task+language to avoid repeated Config calls
+const serviceIdCache: Record<string, { serviceId: string; ts: number }> = {};
+const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+async function getBhashiniServiceId(taskType: 'asr' | 'tts', language: string): Promise<string> {
+  const cacheKey = `${taskType}:${language}`;
+  const cached = serviceIdCache[cacheKey];
+  if (cached && Date.now() - cached.ts < CACHE_TTL_MS) return cached.serviceId;
+
+  const res = await fetch(BHASHINI_CONFIG_ENDPOINT, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      userID: BHASHINI_USER_ID,
+      ulcaApiKey: BHASHINI_ULCA_API_KEY,
+    },
+    body: JSON.stringify({
+      pipelineTasks: [{ taskType }],
+      pipelineRequestConfig: { pipelineId: BHASHINI_PIPELINE_ID },
+    }),
+  });
+
+  if (!res.ok) throw new Error(`Bhashini config call failed: ${res.status} ${await res.text()}`);
+  const data = await res.json();
+
+  const taskConfigs = data.pipelineResponseConfig?.find(
+    (t: any) => t.taskType === taskType
+  )?.config ?? [];
+
+  // Try exact language match first, then fall back to Hindi
+  const match =
+    taskConfigs.find((c: any) => c.language?.sourceLanguage === language) ||
+    taskConfigs.find((c: any) => c.language?.sourceLanguage === 'hi');
+
+  if (!match?.serviceId) throw new Error(`No ${taskType} service found for language: ${language}`);
+
+  serviceIdCache[cacheKey] = { serviceId: match.serviceId, ts: Date.now() };
+  return match.serviceId;
+}
+
+// ─── Bhashini Proxy: ASR ──────────────────────────────────────────────────────
+
+app.post('/api/bhashini/asr', async (req: Request, res: Response) => {
+  try {
+    const { audioBase64, language = 'hi-IN' } = req.body;
+
+    if (!audioBase64 || typeof audioBase64 !== 'string') {
+      return res.status(400).json({ success: false, error: 'audioBase64 is required.' });
+    }
+
+    const bhashiniLang = toBhashiniLang(language);
+    const serviceId = await getBhashiniServiceId('asr', bhashiniLang);
+
+    const computeRes = await fetch(BHASHINI_COMPUTE_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: BHASHINI_INFERENCE_KEY,
+        userID: BHASHINI_USER_ID,
+        ulcaApiKey: BHASHINI_ULCA_API_KEY,
+      },
+      body: JSON.stringify({
+        pipelineTasks: [
+          {
+            taskType: 'asr',
+            config: {
+              language: { sourceLanguage: bhashiniLang },
+              serviceId,
+              audioFormat: 'wav',
+              samplingRate: 16000,
+            },
+          },
+        ],
+        inputData: {
+          audio: [{ audioContent: audioBase64 }],
+        },
+      }),
+    });
+
+    if (!computeRes.ok) {
+      const errText = await computeRes.text();
+      throw new Error(`Bhashini ASR compute failed: ${computeRes.status} — ${errText}`);
+    }
+
+    const data = await computeRes.json();
+    const asrTask = data.pipelineResponse?.find((t: any) => t.taskType === 'asr');
+    const transcript = asrTask?.output?.[0]?.source ?? '';
+
+    return res.json({ success: true, transcript });
+  } catch (err: any) {
+    console.error('[Bhashini ASR] Error:', err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─── Bhashini Proxy: TTS ──────────────────────────────────────────────────────
+
+app.post('/api/bhashini/tts', async (req: Request, res: Response) => {
+  try {
+    const { text, language = 'hi-IN', gender = 'female' } = req.body;
+
+    if (!text || typeof text !== 'string') {
+      return res.status(400).json({ success: false, error: 'text is required.' });
+    }
+
+    const bhashiniLang = toBhashiniLang(language);
+    const serviceId = await getBhashiniServiceId('tts', bhashiniLang);
+
+    const computeRes = await fetch(BHASHINI_COMPUTE_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: BHASHINI_INFERENCE_KEY,
+        userID: BHASHINI_USER_ID,
+        ulcaApiKey: BHASHINI_ULCA_API_KEY,
+      },
+      body: JSON.stringify({
+        pipelineTasks: [
+          {
+            taskType: 'tts',
+            config: {
+              language: { sourceLanguage: bhashiniLang },
+              serviceId,
+              gender,
+            },
+          },
+        ],
+        inputData: {
+          input: [{ source: text }],
+        },
+      }),
+    });
+
+    if (!computeRes.ok) {
+      const errText = await computeRes.text();
+      throw new Error(`Bhashini TTS compute failed: ${computeRes.status} — ${errText}`);
+    }
+
+    const data = await computeRes.json();
+    const ttsTask = data.pipelineResponse?.find((t: any) => t.taskType === 'tts');
+    const audioBase64 = ttsTask?.audio?.[0]?.audioContent ?? '';
+    const samplingRate: number = ttsTask?.config?.samplingRate ?? 22050;
+
+    return res.json({ success: true, audioBase64, samplingRate });
+  } catch (err: any) {
+    console.error('[Bhashini TTS] Error:', err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─── NLP & Heuristic Classifier for Voice Transcripts ────────────────────────
+
 function analyzeTranscript(transcript: string, districtName: string = "Varanasi", dialect: string = "hi-IN") {
   const lower = transcript.toLowerCase();
   
@@ -105,7 +280,8 @@ function analyzeTranscript(transcript: string, districtName: string = "Varanasi"
   };
 }
 
-// 1. Process Voice Transcript Endpoint
+// ─── 1. Process Voice Transcript Endpoint ────────────────────────────────────
+
 app.post('/api/voice/process', (req: Request, res: Response) => {
   try {
     const { transcript, district = "Varanasi", state = "Uttar Pradesh", language = "hi-IN" } = req.body;
@@ -135,7 +311,8 @@ app.post('/api/voice/process', (req: Request, res: Response) => {
   }
 });
 
-// 2. Sync Offline Interviews Endpoint
+// ─── 2. Sync Offline Interviews Endpoint ─────────────────────────────────────
+
 app.post('/api/sync/offline', (req: Request, res: Response) => {
   try {
     const interviews = req.body;
@@ -164,7 +341,8 @@ app.post('/api/sync/offline', (req: Request, res: Response) => {
   }
 });
 
-// 3. District Market & Center Locator Data
+// ─── 3. District Market & Center Locator Data ─────────────────────────────────
+
 app.get('/api/district-data', (req: Request, res: Response) => {
   const districtQuery = (req.query.district as string) || "Varanasi";
   const matchedKey = Object.keys(DISTRICT_MARKET_REGISTRY).find(k =>
@@ -177,17 +355,20 @@ app.get('/api/district-data', (req: Request, res: Response) => {
   });
 });
 
-// Health check
+// ─── Health Check ─────────────────────────────────────────────────────────────
+
 app.get('/api/health', (_req: Request, res: Response) => {
   res.json({
     status: "ok",
     service: "AJAY-VANI Voice Livelihood Engine",
-    version: "1.0.0",
+    version: "2.0.0",
+    bhashiniConfigured: !!(BHASHINI_USER_ID && BHASHINI_ULCA_API_KEY && BHASHINI_INFERENCE_KEY),
     time: new Date().toISOString()
   });
 });
 
-// Serve built PWA frontend if available
+// ─── Serve built PWA frontend ─────────────────────────────────────────────────
+
 const distPath = path.resolve(process.cwd(), 'dist');
 app.use(express.static(distPath));
 
@@ -200,4 +381,9 @@ app.get('*', (req: Request, res: Response) => {
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`AJAY-VANI API Server running on port ${PORT}`);
+  if (!BHASHINI_USER_ID || !BHASHINI_ULCA_API_KEY || !BHASHINI_INFERENCE_KEY) {
+    console.warn('[Bhashini] WARNING: API credentials not set. Copy .env.example to .env and add your keys.');
+  } else {
+    console.log('[Bhashini] ASR + TTS proxy ready.');
+  }
 });

@@ -81,6 +81,8 @@ export function localFallbackProcess(transcript: string, districtName = "Varanas
         name: `Government ITI ${districtName} PM-AJAY Skill Center`,
         nameHi: `राजकीय आईटीआई ${districtName} कौशल केंद्र (पीएम-अजय)`,
         district: districtName,
+        latitude: 25.2818,
+        longitude: 82.9863,
         distanceKm: 5.2,
         courseName: `${roleName} Course (${qpCode})`,
         courseNameHi: `${roleNameHi} प्रशिक्षण (300 घंटे)`,
@@ -89,8 +91,9 @@ export function localFallbackProcess(transcript: string, districtName = "Varanas
         benefitsHi: ["निःशुल्क प्रशिक्षण", "मुफ्त टूलकिट एवं यूनिफॉर्म", "दैनिक भोजन व यात्रा भत्ता (₹150/दिन)"],
         coordinatorName: "श्री राजेश कुमार मिश्र",
         coordinatorPhone: "+91 94520 18290",
-        address: `${districtName} केंद्र परिसर, उत्तर प्रदेश`,
-        addressHi: `${districtName} केंद्र परिसर, उत्तर प्रदेश`
+        address: `करौंदी, बीएचयू परिसर के समीप, ${districtName}`,
+        addressHi: `करौंदी, बीएचयू परिसर के समीप, ${districtName}`,
+        googleMapsUrl: `https://maps.google.com/?q=25.2818,82.9863`
       }
     ]
   };

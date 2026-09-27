@@ -2,38 +2,27 @@ import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { MapPinIcon, PhoneIcon, GraduationCapIcon, SpeakerIcon } from '../components/Icons';
 import { speechService } from '../services/speech';
+import { CenterMap } from '../components/Map/CenterMap';
+import { DISTRICT_MARKET_REGISTRY } from '../../server/data/districtJobs';
+import { SkillingCenter } from '../types';
 
 export const SkillingJobsScreen: React.FC = () => {
   const { currentResult, selectedDistrict, selectedLanguage, setScreen } = useApp();
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  const [selectedCenterId, setSelectedCenterId] = useState<string | undefined>(undefined);
+
+  const defaultRegistry = DISTRICT_MARKET_REGISTRY[selectedDistrict || "Varanasi"] || DISTRICT_MARKET_REGISTRY["Varanasi"];
 
   const districtMarket = currentResult?.districtMarket || {
-    district: selectedDistrict || "Varanasi",
-    state: "Uttar Pradesh",
-    odopSector: "Green Energy & ODOP Traditional Trades",
-    odopSectorHi: "सोलर ऊर्जा एवं पारंपरिक ओडीओपी उद्योग (वाराणसी)",
-    vacanciesCount: 120,
-    centers: [
-      {
-        id: "ctr-vns-1",
-        name: "Government ITI Varanasi PM-AJAY Skill Center",
-        nameHi: "राजकीय आईटीआई वाराणसी कौशल केंद्र (पीएम-अजय)",
-        district: "Varanasi",
-        distanceKm: 5.2,
-        courseName: "Short-Term Solar PV Maintenance (ELE/Q5901)",
-        courseNameHi: "सोलर पीवी इंस्टॉलर एवं रखरखाव कोर्स",
-        durationHours: 300,
-        benefits: ["Free Tuition", "Free Uniform & Tool Kit", "Daily Food & Travel Allowance (₹150/day)"],
-        benefitsHi: ["निःशुल्क प्रशिक्षण", "मुफ्त टूलकिट एवं यूनिफॉर्म", "दैनिक भोजन व यात्रा भत्ता (₹150/दिन)"],
-        coordinatorName: "श्री राजेश कुमार मिश्र",
-        coordinatorPhone: "+919452018290",
-        address: "करौंदी, बीएचयू परिसर के समीप, वाराणसी",
-        addressHi: "करौंदी, बीएचयू परिसर के समीप, वाराणसी"
-      }
-    ]
+    district: defaultRegistry.district,
+    state: defaultRegistry.state,
+    odopSector: defaultRegistry.odopSector,
+    odopSectorHi: defaultRegistry.odopSectorHi,
+    vacanciesCount: defaultRegistry.openingsCount,
+    centers: defaultRegistry.centers
   };
 
-  const spokenCenters = `आपके जिले ${districtMarket.district} में ओडीओपी योजना के तहत ${districtMarket.vacanciesCount} पद उपलब्ध हैं। निकटतम प्रशिक्षण केंद्र राजकीय आईटीआई केवल 5.2 किलोमीटर दूर है, जहां 300 घंटे का निःशुल्क प्रशिक्षण एवं भोजन भत्ता उपलब्ध है।`;
+  const spokenCenters = `आपके जिले ${districtMarket.district} में ओडीओपी योजना के तहत ${districtMarket.vacanciesCount} पद उपलब्ध हैं। निकटतम प्रशिक्षण केंद्र ${districtMarket.centers[0]?.nameHi || 'राजकीय आईटीआई'} केवल ${districtMarket.centers[0]?.distanceKm || 5.2} किलोमीटर दूर है, जहां 300 घंटे का निःशुल्क प्रशिक्षण एवं भोजन भत्ता उपलब्ध है।`;
 
   const handlePlayVoice = () => {
     speechService.speak(
@@ -44,6 +33,8 @@ export const SkillingJobsScreen: React.FC = () => {
     );
   };
 
+  const activeSelectedCenter = districtMarket.centers.find(c => c.id === selectedCenterId) || districtMarket.centers[0];
+
   return (
     <div className="flex-1 flex flex-col justify-between p-5">
       <div className="space-y-4">
@@ -51,10 +42,10 @@ export const SkillingJobsScreen: React.FC = () => {
         <div className="flex items-start justify-between">
           <div>
             <h1 className="font-display text-2xl text-ink">
-              प्रशिक्षण केंद्र एवं रिक्तियां
+              प्रशिक्षण केंद्र एवं लाइव ट्रैकिंग
             </h1>
             <p className="font-caption text-sm text-ink-muted mt-1">
-              जिले में उपलब्ध वास्तविक अवसर एवं केंद्र संपर्क
+              पीएम-अजय वास्तविक केंद्र स्थान व लाइव मानचित्र
             </p>
           </div>
           <button
@@ -85,57 +76,99 @@ export const SkillingJobsScreen: React.FC = () => {
           </p>
         </div>
 
+        {/* Interactive Map Tracking Component */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="font-caption text-xs text-ink-muted uppercase tracking-wide font-semibold flex items-center space-x-1">
+              <MapPinIcon size={14} color="#009378" />
+              <span>नक्शे पर केंद्र ट्रैक करें (Live Map Tracking):</span>
+            </span>
+            <span className="text-[11px] text-trust font-bold">
+              {districtMarket.centers.length} वास्तविक केंद्र मिले
+            </span>
+          </div>
+
+          <CenterMap
+            centers={districtMarket.centers}
+            selectedCenterId={selectedCenterId || activeSelectedCenter?.id}
+            onSelectCenter={(center: SkillingCenter) => setSelectedCenterId(center.id)}
+          />
+        </div>
+
         {/* Center Locator Cards */}
-        <div className="space-y-3">
+        <div className="space-y-3 pt-2">
           <span className="font-caption text-xs text-ink-muted uppercase tracking-wide block font-semibold">
-            निकटतम पीएम-अजय कौशल केंद्र (Nearby Centers):
+            पीएम-अजय कौशल केंद्रों की सूची (Skill Centers List):
           </span>
 
-          {districtMarket.centers.map((center) => (
-            <div key={center.id} className="card-flat bg-white border-line p-4 space-y-3">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h3 className="font-bold text-base text-ink leading-tight">
-                    {center.nameHi}
-                  </h3>
-                  <div className="flex items-center space-x-1.5 text-xs text-ink-muted mt-1">
-                    <MapPinIcon size={14} color="#009378" />
-                    <span>{center.addressHi}</span>
+          {districtMarket.centers.map((center) => {
+            const isSelected = (selectedCenterId || activeSelectedCenter?.id) === center.id;
+            return (
+              <div 
+                key={center.id} 
+                onClick={() => setSelectedCenterId(center.id)}
+                className={`card-flat border p-4 space-y-3 transition-all cursor-pointer ${
+                  isSelected ? 'bg-white border-trust shadow-sm ring-1 ring-trust/30' : 'bg-white border-line hover:border-trust/40'
+                }`}
+              >
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h3 className="font-bold text-base text-ink leading-tight flex items-center gap-1.5">
+                      <span>{center.nameHi || center.name}</span>
+                    </h3>
+                    <div className="flex items-center space-x-1.5 text-xs text-ink-muted mt-1">
+                      <MapPinIcon size={14} color="#009378" />
+                      <span>{center.addressHi || center.address}</span>
+                    </div>
+                  </div>
+                  <span className="shrink-0 bg-surface border border-line text-ink font-semibold text-xs px-2 py-1 rounded">
+                    {center.distanceKm} किमी दूर
+                  </span>
+                </div>
+
+                {/* Course Detail */}
+                <div className="bg-surface/60 rounded p-2.5 text-xs border border-line/60">
+                  <span className="text-ink-muted block">प्रशिक्षण पाठ्यक्रम:</span>
+                  <span className="font-semibold text-ink text-sm block mt-0.5">
+                    {center.courseNameHi || center.courseName}
+                  </span>
+                  <span className="text-trust font-medium mt-1 block">
+                    अवधि: {center.durationHours} घंटे (निःशुल्क प्रशिक्षण + ₹150 दैनिक भोजन व यात्रा भत्ता)
+                  </span>
+                </div>
+
+                {/* Navigation and Direct Call Buttons */}
+                <div className="pt-2 border-t border-line flex items-center justify-between">
+                  <div className="text-xs">
+                    <span className="text-ink-muted block">केंद्र समन्वयक:</span>
+                    <span className="font-medium text-ink">{center.coordinatorName}</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <a
+                      href={center.googleMapsUrl || `https://www.google.com/maps/dir/?api=1&destination=${center.latitude},${center.longitude}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="btn-secondary text-xs !min-h-[44px] !py-2 !px-2.5 inline-flex items-center space-x-1"
+                      aria-label="नेविगेट करें"
+                    >
+                      <MapPinIcon size={14} color="#009378" />
+                      <span>दिशा-निर्देश</span>
+                    </a>
+                    <a
+                      href={`tel:${center.coordinatorPhone.replace(/\s+/g, '')}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="btn-primary text-xs !min-h-[44px] !py-2 !px-3 inline-flex items-center space-x-1.5"
+                      aria-label="समन्वयक को कॉल करें"
+                    >
+                      <PhoneIcon size={14} color="#FFFFFF" />
+                      <span>कॉल करें</span>
+                    </a>
                   </div>
                 </div>
-                <span className="shrink-0 bg-surface border border-line text-ink font-semibold text-xs px-2 py-1 rounded">
-                  {center.distanceKm} किमी दूर
-                </span>
               </div>
-
-              {/* Course Detail */}
-              <div className="bg-surface/60 rounded p-2.5 text-xs border border-line/60">
-                <span className="text-ink-muted block">प्रशिक्षण पाठ्यक्रम:</span>
-                <span className="font-semibold text-ink text-sm block mt-0.5">
-                  {center.courseNameHi}
-                </span>
-                <span className="text-trust font-medium mt-1 block">
-                  अवधि: {center.durationHours} घंटे (निःशुल्क प्रशिक्षण + ₹150 दैनिक भोजन व यात्रा भत्ता)
-                </span>
-              </div>
-
-              {/* Coordinator & Direct Call Button */}
-              <div className="pt-2 border-t border-line flex items-center justify-between">
-                <div className="text-xs">
-                  <span className="text-ink-muted block">केंद्र समन्वयक:</span>
-                  <span className="font-medium text-ink">{center.coordinatorName}</span>
-                </div>
-                <a
-                  href={`tel:${center.coordinatorPhone.replace(/\s+/g, '')}`}
-                  className="btn-primary text-xs !min-h-[44px] !py-2 !px-3 inline-flex items-center space-x-1.5"
-                  aria-label="समन्वयक को कॉल करें"
-                >
-                  <PhoneIcon size={14} color="#FFFFFF" />
-                  <span>कॉल करें</span>
-                </a>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
