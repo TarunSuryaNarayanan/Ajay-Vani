@@ -9,6 +9,9 @@ import { NSQFProfileScreen } from './screens/NSQFProfileScreen';
 import { SkillingJobsScreen } from './screens/SkillingJobsScreen';
 import { MicroFinanceScreen } from './screens/MicroFinanceScreen';
 import { OfflineSyncScreen } from './screens/OfflineSyncScreen';
+import { AadhaarLoginScreen } from './screens/AadhaarLoginScreen';
+import { AadhaarOtpScreen } from './screens/AadhaarOtpScreen';
+import { BeneficiaryDashboardScreen } from './screens/BeneficiaryDashboardScreen';
 import { PrivacyPolicyModal } from './components/Modals/PrivacyPolicyModal';
 import { TermsModal } from './components/Modals/TermsModal';
 
@@ -29,6 +32,12 @@ const AppContent: React.FC = () => {
         return <MicroFinanceScreen />;
       case 'offline-sync':
         return <OfflineSyncScreen />;
+      case 'aadhaar-login':
+        return <AadhaarLoginScreen />;
+      case 'aadhaar-otp':
+        return <AadhaarOtpScreen />;
+      case 'beneficiary-dashboard':
+        return <BeneficiaryDashboardScreen />;
       default:
         return <LanguageSelectionScreen />;
     }

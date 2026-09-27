@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { LanguageCode, VoiceProcessResult, ScreenType, OfflineInterview } from '../types';
+import { LanguageCode, VoiceProcessResult, ScreenType, OfflineInterview, AadhaarSession } from '../types';
 import { offlineStorage } from '../services/offlineStorage';
 import { syncOfflineInterviews } from '../services/api';
 
@@ -17,6 +17,9 @@ interface AppContextType {
   isSyncing: boolean;
   privacyOpen: boolean;
   termsOpen: boolean;
+  aadhaarNumber: string;
+  isAadhaarLoggedIn: boolean;
+  aadhaarSession: AadhaarSession | null;
   setScreen: (screen: ScreenType) => void;
   setLanguage: (lang: LanguageCode, name: string) => void;
   setDistrict: (district: string) => void;
@@ -25,6 +28,10 @@ interface AppContextType {
   setPrivacyOpen: (open: boolean) => void;
   setTermsOpen: (open: boolean) => void;
   resetToHome: () => void;
+  submitAadhaarNumber: (aadhaar: string) => void;
+  verifyAadhaarOtp: (otp: string) => boolean;
+  loginDemoBeneficiary: () => void;
+  logoutAadhaar: () => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -43,6 +50,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [privacyOpen, setPrivacyOpen] = useState<boolean>(false);
   const [termsOpen, setTermsOpen] = useState<boolean>(false);
+
+  // Aadhaar Login State per aadhaar_login_architecture.md
+  const [aadhaarNumber, setAadhaarNumber] = useState<string>('');
+  const [isAadhaarLoggedIn, setIsAadhaarLoggedIn] = useState<boolean>(false);
+  const [aadhaarSession, setAadhaarSession] = useState<AadhaarSession | null>(null);
 
   // Monitor network connectivity per Developer Guide §3 Screen 6
   useEffect(() => {
@@ -151,6 +163,65 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setCurrentScreen('language-select');
   };
 
+  // Aadhaar Login Handlers
+  const submitAadhaarNumber = (num: string) => {
+    const cleanNum = num.replace(/\D/g, '');
+    setAadhaarNumber(cleanNum);
+    setCurrentScreen('aadhaar-otp');
+  };
+
+  const verifyAadhaarOtp = (otp: string): boolean => {
+    // Standard validation: Demo OTP '1234' or any 4 digit code
+    if (otp === '1234' || otp.length === 4) {
+      const cleanAadhaar = aadhaarNumber || '999988887777';
+      const last4 = cleanAadhaar.slice(-4) || '7777';
+      
+      const session: AadhaarSession = {
+        aadhaarNumber: cleanAadhaar,
+        maskedAadhaar: `XXXX XXXX ${last4}`,
+        isVerified: true,
+        beneficiaryName: currentResult?.profile.beneficiaryName || "रमेश कुमार (Ramesh Kumar)",
+        scCategoryVerified: true,
+        district: selectedDistrict || "Varanasi",
+        grantStep: 3, // BDO Approval Pending
+        stipendDaysAttended: 30,
+        stipendTotalEarned: 4500
+      };
+
+      setAadhaarSession(session);
+      setIsAadhaarLoggedIn(true);
+      setCurrentScreen('beneficiary-dashboard');
+      return true;
+    }
+    return false;
+  };
+
+  const loginDemoBeneficiary = () => {
+    setAadhaarNumber('999988887777');
+    const session: AadhaarSession = {
+      aadhaarNumber: '999988887777',
+      maskedAadhaar: 'XXXX XXXX 7777',
+      isVerified: true,
+      beneficiaryName: "रमेश कुमार (SIH Demo Beneficiary)",
+      scCategoryVerified: true,
+      district: selectedDistrict || "Varanasi",
+      grantStep: 3, // BDO Clearance Pending
+      stipendDaysAttended: 30,
+      stipendTotalEarned: 4500
+    };
+
+    setAadhaarSession(session);
+    setIsAadhaarLoggedIn(true);
+    setCurrentScreen('beneficiary-dashboard');
+  };
+
+  const logoutAadhaar = () => {
+    setIsAadhaarLoggedIn(false);
+    setAadhaarSession(null);
+    setAadhaarNumber('');
+    setCurrentScreen('aadhaar-login');
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -167,6 +238,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         isSyncing,
         privacyOpen,
         termsOpen,
+        aadhaarNumber,
+        isAadhaarLoggedIn,
+        aadhaarSession,
         setScreen: setCurrentScreen,
         setLanguage,
         setDistrict,
@@ -174,7 +248,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         triggerSync,
         setPrivacyOpen,
         setTermsOpen,
-        resetToHome
+        resetToHome,
+        submitAadhaarNumber,
+        verifyAadhaarOtp,
+        loginDemoBeneficiary,
+        logoutAadhaar
       }}
     >
       {children}

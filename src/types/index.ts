@@ -84,10 +84,25 @@ export interface OfflineInterview {
   isSynced: boolean;
 }
 
+export interface AadhaarSession {
+  aadhaarNumber: string;
+  maskedAadhaar: string;
+  isVerified: boolean;
+  beneficiaryName: string;
+  scCategoryVerified: boolean;
+  district: string;
+  grantStep: number; // 1: Profiling, 2: Proposal, 3: BDO Approval Pending, 4: Disbursed
+  stipendDaysAttended: number;
+  stipendTotalEarned: number;
+}
+
 export type ScreenType = 
   | 'language-select' 
   | 'voice-chat' 
   | 'nsqf-profile' 
   | 'skilling-jobs' 
   | 'micro-finance' 
-  | 'offline-sync';
+  | 'offline-sync'
+  | 'aadhaar-login'
+  | 'aadhaar-otp'
+  | 'beneficiary-dashboard';
