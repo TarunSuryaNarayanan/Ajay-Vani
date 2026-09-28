@@ -38,12 +38,13 @@ export const DISTRICT_MARKET_REGISTRY: Record<string, DistrictMarketData> = {
         coordinatorPhone: "+91 94520 18290",
         address: "Karaundi, Near BHU Campus, Varanasi, UP - 221005",
         addressHi: "करौंदी, बीएचयू परिसर के समीप, वाराणसी - 221005",
-        googleMapsUrl: "https://maps.google.com/?q=25.2818,82.9863",
-        pincode: "221005"
-      },
-      {
-        id: "ctr-vns-2",
-        name: "Pradhan Mantri Kaushal Kendra (PMKK) Rohaniya",
+         googleMapsUrl: "https://maps.google.com/?q=25.2818,82.9863",
+         pincode: "221005",
+         qpCode: "ELE/Q5901"
+       },
+       {
+         id: "ctr-vns-2",
+         name: "Pradhan Mantri Kaushal Kendra (PMKK) Rohaniya",
         nameHi: "प्रधानमंत्री कौशल केंद्र, रोहनिया",
         district: "Varanasi",
         latitude: 25.2677,
@@ -78,9 +79,10 @@ export const DISTRICT_MARKET_REGISTRY: Record<string, DistrictMarketData> = {
         coordinatorPhone: "+91 94158 12390",
         address: "Chauka Ghat, Near Railway Station, Varanasi, UP - 221002",
         addressHi: "चौकाघाट, रेलवे स्टेशन के पास, वाराणसी - 221002",
-        googleMapsUrl: "https://maps.google.com/?q=25.3262,82.9995",
-        pincode: "221002"
-      }
+         googleMapsUrl: "https://maps.google.com/?q=25.3262,82.9995",
+         pincode: "221002",
+         qpCode: "AMH/Q0101"
+       }
     ]
   },
   "Gorakhpur": {
@@ -109,12 +111,13 @@ export const DISTRICT_MARKET_REGISTRY: Record<string, DistrictMarketData> = {
         coordinatorPhone: "+91 94152 77319",
         address: "Chargawan Road, Medical College Link, Gorakhpur - 273013",
         addressHi: "चरगांवा रोड, मेडिकल कॉलेज लिंक, गोरखपुर - 273013",
-        googleMapsUrl: "https://maps.google.com/?q=26.7997,83.3855",
-        pincode: "273013"
-      },
-      {
-        id: "ctr-gkp-2",
-        name: "PMKK Fertilizer Campus Center Gorakhpur",
+         googleMapsUrl: "https://maps.google.com/?q=26.7641,83.3423",
+         pincode: "273013",
+         qpCode: "AGR/Q6701"
+       },
+       {
+         id: "ctr-gkp-2",
+         name: "PMKK Fertilizer Campus Center Gorakhpur",
         nameHi: "प्रधानमंत्री कौशल केंद्र, फर्टिलाइजर कैंपस, गोरखपुर",
         district: "Gorakhpur",
         latitude: 26.7905,
@@ -129,12 +132,13 @@ export const DISTRICT_MARKET_REGISTRY: Record<string, DistrictMarketData> = {
         coordinatorPhone: "+91 94512 88204",
         address: "Fertilizer Township, Gorakhpur, UP - 273007",
         addressHi: "फर्टिलाइजर टाउनशिप, गोरखपुर - 273007",
-        googleMapsUrl: "https://maps.google.com/?q=26.7905,83.3591",
-        pincode: "273007"
-      }
-    ]
+         googleMapsUrl: "https://maps.google.com/?q=26.7626,83.3258",
+         pincode: "273007",
+         qpCode: "AMH/Q0101"
+       }
+     ]
   },
-  "Bundelkhand": {
+  "Jhansi": {
     district: "Jhansi (Bundelkhand)",
     state: "Uttar Pradesh",
     odopSector: "Solar Agricultural Pump & Water Conservation Infrastructure",
@@ -160,9 +164,10 @@ export const DISTRICT_MARKET_REGISTRY: Record<string, DistrictMarketData> = {
         coordinatorPhone: "+91 94500 33812",
         address: "Near Collectorate, Civil Lines, Jhansi - 284001",
         addressHi: "कलेक्ट्रेट के समीप, सिविल लाइंस, झांसी - 284001",
-        googleMapsUrl: "https://maps.google.com/?q=25.4484,78.5685",
-        pincode: "284001"
-      }
+         googleMapsUrl: "https://maps.google.com/?q=25.4484,78.5685",
+         pincode: "284001",
+         qpCode: "AGR/Q1201"
+       }
     ]
   },
   "Patna": {
@@ -191,9 +196,10 @@ export const DISTRICT_MARKET_REGISTRY: Record<string, DistrictMarketData> = {
         coordinatorPhone: "+91 94310 66723",
         address: "Digha Ghat Road, Patna, Bihar - 800011",
         addressHi: "दीघा घाट रोड, पटना, बिहार - 800011",
-        googleMapsUrl: "https://maps.google.com/?q=25.6322,85.1017",
-        pincode: "800011"
-      }
-    ]
+         googleMapsUrl: "https://maps.google.com/?q=25.6322,85.1017",
+         pincode: "800011",
+         qpCode: "ELE/Q5901"
+       }
+     ]
   }
 };

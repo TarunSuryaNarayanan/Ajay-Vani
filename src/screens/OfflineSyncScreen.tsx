@@ -5,7 +5,7 @@ import { OfflineInterview } from '../types';
 import { CheckIcon, SyncIcon, AlertIcon } from '../components/Icons';
 
 export const OfflineSyncScreen: React.FC = () => {
-  const { isOnline, unsyncedCount, isSyncing, justSynced, syncError, triggerSync, setScreen } = useApp();
+  const { isOnline, unsyncedCount, isSyncing, justSynced, syncError, triggerSync, setScreen, pendingGrievanceCount } = useApp();
   const [interviews, setInterviews] = useState<OfflineInterview[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -55,6 +55,23 @@ export const OfflineSyncScreen: React.FC = () => {
             {!isOnline
               ? "सभी वॉयस इंटरव्यू डिवाइस की आंतरिक मेमोरी में सुरक्षित संग्रहीत हो रहे हैं। नेटवर्क मिलते ही स्वतः सिंक होंगे।"
               : "केंद्रीय सर्वर से कनेक्शन सक्रिय है। आपका डेटा सुरक्षित रूप से सिंक हो रहा है।"}
+          </p>
+        </div>
+
+        {/* F1 grievance queue — complaints take a different route than interviews */}
+        <div className="card-flat bg-white border-line p-4 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="font-caption text-xs text-ink-muted uppercase font-bold tracking-wider">
+              शिकायत टिकट कतार (Grievance Queue)
+            </span>
+            <span className="text-xs px-2 py-1 rounded border font-semibold border-line bg-surface text-ink">
+              {pendingGrievanceCount} लंबित
+            </span>
+          </div>
+          <p className="text-[11px] text-ink-muted leading-relaxed">
+            {pendingGrievanceCount > 0
+              ? "यह शिकायतें ऑफलाइन रहते समय सुरक्षित रखी गई हैं। कनेक्शन मिलते ही या ऐप खुलते ही मंत्रालय डैशबोर्ड पर अपने आप भेज दी जाती हैं।"
+              : "कोई लंबित शिकायत नहीं। सभी टिकट मंत्रालय डैशबोर्ड पर पहुँच चुके हैं।"}
           </p>
         </div>
 

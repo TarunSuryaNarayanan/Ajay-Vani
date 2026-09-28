@@ -3,6 +3,8 @@ import { AppProvider, useApp } from './context/AppContext';
 import { MobileContainer } from './components/Layout/MobileContainer';
 import { Header } from './components/Layout/Header';
 import { OfflineBanner } from './components/Layout/OfflineBanner';
+import { TtsUnavailableToast } from './components/Layout/TtsUnavailableToast';
+import { AsrRetryToast } from './components/Layout/AsrRetryToast';
 import { LanguageSelectionScreen } from './screens/LanguageSelectionScreen';
 import { VoiceChatScreen } from './screens/VoiceChatScreen';
 import { NSQFProfileScreen } from './screens/NSQFProfileScreen';
@@ -12,6 +14,9 @@ import { OfflineSyncScreen } from './screens/OfflineSyncScreen';
 import { AadhaarLoginScreen } from './screens/AadhaarLoginScreen';
 import { AadhaarOtpScreen } from './screens/AadhaarOtpScreen';
 import { BeneficiaryDashboardScreen } from './screens/BeneficiaryDashboardScreen';
+import { ServicesPanelHost } from './components/Dashboard/DashboardSidePanel';
+import { PostTrainingGuidanceScreen } from './screens/PostTrainingGuidanceScreen';
+import { MinistryDashboardScreen } from './screens/MinistryDashboardScreen';
 import { PrivacyPolicyModal } from './components/Modals/PrivacyPolicyModal';
 import { TermsModal } from './components/Modals/TermsModal';
 
@@ -38,6 +43,10 @@ const AppContent: React.FC = () => {
         return <AadhaarOtpScreen />;
       case 'beneficiary-dashboard':
         return <BeneficiaryDashboardScreen />;
+      case 'post-training-guidance':
+        return <PostTrainingGuidanceScreen />;
+      case 'ministry-dashboard':
+        return <MinistryDashboardScreen />;
       default:
         return <LanguageSelectionScreen />;
     }
@@ -50,6 +59,15 @@ const AppContent: React.FC = () => {
       <main className="flex-1 flex flex-col overflow-y-auto">
         {renderScreen()}
       </main>
+
+      {/* Every speaker button reports itself here when no voice backend exists */}
+      <TtsUnavailableToast />
+
+      {/* Asks the beneficiary to repeat when the browser recogniser takes over */}
+      <AsrRetryToast />
+
+      {/* Complaints · training lifecycle · QR token, opened from the header */}
+      <ServicesPanelHost />
 
       {/* Mandatory Pre-Launch Legal Modals per design.md §10 */}
       <PrivacyPolicyModal

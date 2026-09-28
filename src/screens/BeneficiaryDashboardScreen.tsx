@@ -1,47 +1,52 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { 
-  SpeakerIcon, 
-  DocumentIcon, 
-  CheckIcon, 
-  GraduationCapIcon, 
-  MapPinIcon 
+import {
+  SpeakerIcon,
+  DocumentIcon,
+  CheckIcon,
+  GraduationCapIcon,
+  MapPinIcon
 } from '../components/Icons';
 import { speechService } from '../services/speech';
 import { generateBusinessProposalPDF } from '../services/pdfGenerator';
+import { getDashboardText, formatText } from '../services/translations';
 
 export const BeneficiaryDashboardScreen: React.FC = () => {
-  const { 
-    aadhaarSession, 
-    currentResult, 
-    selectedDistrict, 
-    selectedLanguage, 
-    setScreen, 
-    logoutAadhaar 
+  const {
+    aadhaarSession,
+    currentResult,
+    selectedDistrict,
+    selectedLanguage,
+    setScreen,
+    logoutAadhaar
   } = useApp();
-
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [isDownloadingPDF, setIsDownloadingPDF] = useState(false);
 
+  const t = (key: string) => getDashboardText(selectedLanguage || 'hi-IN', key);
+
   const profile = currentResult?.profile || {
     beneficiaryName: aadhaarSession?.beneficiaryName || "रमेश कुमार",
-    educationLevel: "8वीं पास",
-    traditionalOccupation: "सोलर पीवी एवं बिजली कार्य",
-    employmentPreference: "स्वरोजगार (Self-Employment)",
-    mobilityRadius: "जिले के अंदर (15 किमी)"
+    educationLevel: t('dashEdu'),
+    traditionalOccupation: t('dashOccupation'),
+    employmentPreference: t('dashPreference'),
+    mobilityRadius: t('dashRadius')
   };
 
   const nsqf = currentResult?.recommendedNSQF || {
     qpCode: "ELE/Q5901",
     roleName: "Solar PV Installer & Electrician",
-    roleNameHi: "सोलर पीवी इंस्टॉलर एवं तकनीशियन",
+    roleNameHi:
+      selectedLanguage === 'en-IN'
+        ? "Solar PV Installer & Electrician"
+        : "सोलर पीवी इंस्टॉलर एवं तकनीशियन",
     nsqfLevel: 4,
     sector: "Green Jobs",
     matchScore: 92,
     estimatedIncome: "₹18,000 - ₹26,000 / माह"
   };
 
-  const dashboardAudioText = `नमस्ते ${profile.beneficiaryName} जी! आपका आधार सत्यापन सफल रहा। आपके 50,000 रुपये के पीएम-अजय अनुदान का प्रस्ताव बीडीओ कार्यालय में प्रक्रियाधीन है। प्रशिक्षण केंद्र में आपकी 30 दिनों की उपस्थिति दर्ज है और 4,500 रुपये का भोजन भत्ता आपके बैंक खाते में स्थानांतरित किया जा रहा है।`;
+  const dashboardAudioText = t('dashAudio').replace('{name}', profile.beneficiaryName);
 
   const handlePlayVoice = () => {
     speechService.speak(
@@ -67,10 +72,10 @@ export const BeneficiaryDashboardScreen: React.FC = () => {
         <div className="flex items-start justify-between">
           <div>
             <h1 className="font-display text-2xl text-ink">
-              व्यक्तिगत लाभार्थी डैशबोर्ड
+              {t('dashTitle')}
             </h1>
             <p className="font-caption text-sm text-ink-muted mt-0.5">
-              पीएम-अजय विशेष सहायता एवं वजीफा ट्रैकर
+              {t('dashSubtitle')}
             </p>
           </div>
           <button
@@ -78,7 +83,7 @@ export const BeneficiaryDashboardScreen: React.FC = () => {
             className={`w-11 h-11 rounded border flex items-center justify-center transition-colors ${
               isPlayingAudio ? 'bg-action text-white border-action' : 'bg-surface border-line text-trust'
             }`}
-            aria-label="डैशबोर्ड स्थिति सुनें"
+            aria-label={t('dashPlayStatus')}
           >
             <SpeakerIcon size={20} color={isPlayingAudio ? '#FFFFFF' : '#009378'} />
           </button>
@@ -111,9 +116,11 @@ export const BeneficiaryDashboardScreen: React.FC = () => {
           <div className="flex items-center justify-between text-xs pt-1">
             <div className="flex items-center space-x-1.5 bg-emerald-50 text-emerald-800 border border-emerald-200 px-2.5 py-1 rounded-full font-bold">
               <CheckIcon size={13} color="#064e3b" />
-              <span>अनुसूचित जाति (SC) सब्सिडी पात्र</span>
+              <span>{t('dashScEligible')}</span>
             </div>
-            <span className="text-ink-muted text-[11px]">आधार सत्यापन: <strong>सफल (Verified)</strong></span>
+            <span className="text-ink-muted text-[11px]">
+              {t('dashVerified')} <strong>{t('dashVerifiedOk')}</strong>
+            </span>
           </div>
         </div>
 
@@ -121,15 +128,17 @@ export const BeneficiaryDashboardScreen: React.FC = () => {
         <div className="card-flat bg-surface/80 border-line p-3.5 space-y-2">
           <div className="flex items-center space-x-2 text-trust text-xs font-semibold uppercase tracking-wider">
             <GraduationCapIcon size={16} color="#009378" />
-            <span>सक्रिय NSQF ट्रेड (Assigned Qualification)</span>
+            <span>{t('dashTradeLabel')}</span>
           </div>
           <div className="flex items-center justify-between">
             <div>
               <h3 className="font-bold text-sm text-ink">{nsqf.roleNameHi}</h3>
-              <p className="text-xs text-ink-muted">{nsqf.qpCode} • NSQF लेवल {nsqf.nsqfLevel}</p>
+              <p className="text-xs text-ink-muted">
+                {nsqf.qpCode} • {formatText(selectedLanguage || 'hi-IN', 'dashNsqfLevel', nsqf.nsqfLevel)}
+              </p>
             </div>
             <span className="bg-trust text-surface text-xs font-bold px-2 py-1 rounded">
-              {nsqf.matchScore}% मैच
+              {formatText(selectedLanguage || 'hi-IN', 'dashMatchScore', nsqf.matchScore)}
             </span>
           </div>
         </div>
@@ -138,10 +147,10 @@ export const BeneficiaryDashboardScreen: React.FC = () => {
         <div className="card-flat bg-white border-line p-4 space-y-3">
           <div className="flex items-center justify-between border-b border-line/60 pb-2">
             <span className="font-caption text-xs uppercase font-bold tracking-wide text-ink">
-              💰 ₹50,000 पीएम-अजय अनुदान स्थिति (Grant Tracker)
+              💰 {t('dashGrantTitle')}
             </span>
             <span className="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded">
-              बीडीओ स्तर पर लंबित
+              {t('dashGrantPending')}
             </span>
           </div>
 
@@ -152,8 +161,8 @@ export const BeneficiaryDashboardScreen: React.FC = () => {
                 ✓
               </div>
               <div className="text-xs">
-                <span className="font-bold text-ink block">चरण 1: वॉयस प्रोफाइलिंग संपन्न</span>
-                <span className="text-ink-muted text-[11px]">एआई द्वारा NSQF ट्रेड एवं पात्रता निर्धारित</span>
+                <span className="font-bold text-ink block">{t('dashStep1')}</span>
+                <span className="text-ink-muted text-[11px]">{t('dashStep1d')}</span>
               </div>
             </div>
 
@@ -162,8 +171,8 @@ export const BeneficiaryDashboardScreen: React.FC = () => {
                 ✓
               </div>
               <div className="text-xs">
-                <span className="font-bold text-ink block">चरण 2: 1-पृष्ठ व्यापार प्रस्ताव निर्मित</span>
-                <span className="text-ink-muted text-[11px]">माइक्रो-एंटरप्राइज GIA दस्तावेज तैयार</span>
+                <span className="font-bold text-ink block">{t('dashStep2')}</span>
+                <span className="text-ink-muted text-[11px]">{t('dashStep2d')}</span>
               </div>
             </div>
 
@@ -172,8 +181,8 @@ export const BeneficiaryDashboardScreen: React.FC = () => {
                 ⏳
               </div>
               <div className="text-xs">
-                <span className="font-bold text-amber-900 block">चरण 3: बीडीओ सरकारी अनुदान स्वीकृति</span>
-                <span className="text-amber-800 text-[11px]">खंड विकास अधिकारी (BDO) द्वारा भौतिक सत्यापन जारी</span>
+                <span className="font-bold text-amber-900 block">{t('dashStep3')}</span>
+                <span className="text-amber-800 text-[11px]">{t('dashStep3d')}</span>
               </div>
             </div>
 
@@ -182,8 +191,8 @@ export const BeneficiaryDashboardScreen: React.FC = () => {
                 4
               </div>
               <div className="text-xs">
-                <span className="font-bold text-ink block">चरण 4: मुद्रा बैंक ऋण एवं सब्सिडी वितरण</span>
-                <span className="text-ink-muted text-[11px]">₹50,000 GIA अनुदान खाता हस्तांतरण</span>
+                <span className="font-bold text-ink block">{t('dashStep4')}</span>
+                <span className="text-ink-muted text-[11px]">{t('dashStep4d')}</span>
               </div>
             </div>
           </div>
@@ -193,20 +202,22 @@ export const BeneficiaryDashboardScreen: React.FC = () => {
         <div className="card-flat bg-trust/5 border-trust/20 p-4 space-y-2">
           <div className="flex items-center justify-between">
             <span className="font-caption text-xs font-bold text-trust uppercase">
-              🏫 प्रशिक्षण केंद्र दैनिक वजीफा (Stipend Tracker)
+              🏫 {t('dashStipendTitle')}
             </span>
             <span className="text-xs font-bold text-trust bg-trust/10 px-2 py-0.5 rounded">
-              ₹150 / दिन
+              {t('dashPerDay')}
             </span>
           </div>
 
           <div className="grid grid-cols-2 gap-2 pt-1 text-xs">
             <div className="bg-white border border-line rounded p-2 text-center">
-              <span className="text-ink-muted text-[11px] block">कुल उपस्थिति:</span>
-              <strong className="text-base text-ink block mt-0.5">30 / 30 दिन</strong>
+              <span className="text-ink-muted text-[11px] block">{t('dashAttendance')}</span>
+              <strong className="text-base text-ink block mt-0.5">
+                {formatText(selectedLanguage || 'hi-IN', 'dashAttendanceValue', 30, 30)}
+              </strong>
             </div>
             <div className="bg-white border border-line rounded p-2 text-center">
-              <span className="text-ink-muted text-[11px] block">अर्जित भोजन व यात्रा भत्ता:</span>
+              <span className="text-ink-muted text-[11px] block">{t('dashEarned')}</span>
               <strong className="text-base text-trust block mt-0.5">₹4,500</strong>
             </div>
           </div>
@@ -220,7 +231,7 @@ export const BeneficiaryDashboardScreen: React.FC = () => {
         >
           <DocumentIcon size={18} color="#FFFFFF" />
           <span>
-            {isDownloadingPDF ? "दस्तावेज़ डाउनलोड हो रहा है..." : "1-पृष्ठ व्यापार प्रस्ताव पुनः डाउनलोड करें"}
+            {isDownloadingPDF ? t('dashDownloading') : t('dashDownload')}
           </span>
         </button>
       </div>
@@ -231,16 +242,17 @@ export const BeneficiaryDashboardScreen: React.FC = () => {
           onClick={() => setScreen('voice-chat')}
           className="btn-secondary w-full text-xs font-bold"
         >
-          नया वॉयस इंटरव्यू / सहायता शुरू करें
+          {t('dashNewInterview')}
         </button>
 
         <button
           onClick={logoutAadhaar}
           className="w-full py-2 text-center text-xs font-bold text-alert hover:underline"
         >
-          डैशबोर्ड से लॉगआउट करें (Logout)
+          {t('dashLogout')}
         </button>
       </div>
+
     </div>
   );
 };

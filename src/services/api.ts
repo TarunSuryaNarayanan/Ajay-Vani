@@ -1,4 +1,17 @@
-import { VoiceProcessResult, LanguageCode, DistrictMarket } from '../types';
+import {
+  VoiceProcessResult,
+  LanguageCode,
+  DistrictMarket,
+  SkillingCenter,
+  GrievanceIssueType,
+  GrievanceMetadata,
+  GrievanceStatus,
+  GrievanceTicket,
+  LifecycleEnrollment,
+  PostTrainingJobOpening,
+} from '../types';
+import QRCode from 'qrcode';
+import { buildSpokenResponse, normaliseSpokenName } from './spokenResponse';
 
 const API_BASE = '/api';
 
@@ -18,10 +31,10 @@ export function localFallbackProcess(transcript: string, districtName = "Varanas
   }
 
   // Detect beneficiary name if spoken
-  let beneficiaryName = "साथी";
-  const nameMatch = transcript.match(/(?:naam|नाम|हमार नाम|मेरा नाम)\s+([A-Za-z\u0900-\u097F]+)/i);
+  let beneficiaryName = normaliseSpokenName(undefined, dialect);
+  const nameMatch = transcript.match(/(?:naam|नाम|हमार नाम|मेरा नाम)\s+([A-Za-zऀ-ॿ]+)/i);
   if (nameMatch && nameMatch[1]) {
-    beneficiaryName = nameMatch[1];
+    beneficiaryName = normaliseSpokenName(nameMatch[1], dialect);
   }
 
   // Match QP
@@ -60,14 +73,15 @@ export function localFallbackProcess(transcript: string, districtName = "Varanas
     income = "₹15,000 - ₹24,000 / माह";
   }
 
-  let friendlyAudio = "";
-  if (dialect.includes("bho")) {
-    friendlyAudio = `राम राम ${beneficiaryName} भाई! आपके अनुभव के आधार पर ${roleNameHi} खातिर आपके जिले ${districtName} में ${vacanciesCount} जगह उपलब्ध बा। पास के सरकारी सेंटर में 300 घंटा के मुफ़्त कोर्स और भोजन भत्ता के सुविधा बा।`;
-  } else if (dialect.includes("bun")) {
-    friendlyAudio = `राम राम ${beneficiaryName} भइया! आपके जिले ${districtName} में ${roleNameHi} के काम में ${vacanciesCount} पद खाली हैं। पास के केंद्र में मुफ्त ट्रेनिंग के संगे भोजन भत्ता भी मिलेगो।`;
-  } else {
-    friendlyAudio = `नमस्ते ${beneficiaryName} जी! आपके अनुभव के आधार पर ${roleNameHi} आपके लिए सबसे उत्तम है। आपके जिले ${districtName} में इसके लिए ${vacanciesCount} पद उपलब्ध हैं। पास के सरकारी केंद्र में 300 घंटे का निःशुल्क प्रशिक्षण उपलब्ध है।`;
-  }
+  // Spoken in the selected language, matching what the server would say online.
+  const friendlyAudio = buildSpokenResponse(dialect, {
+    beneficiaryName,
+    qpCode,
+    roleName,
+    roleNameHi,
+    district: districtName,
+    centreCount: vacanciesCount,
+  });
 
   const districtMarket: DistrictMarket = {
     district: districtName,
@@ -93,7 +107,8 @@ export function localFallbackProcess(transcript: string, districtName = "Varanas
         coordinatorPhone: "+91 94520 18290",
         address: `करौंदी, बीएचयू परिसर के समीप, ${districtName}`,
         addressHi: `करौंदी, बीएचयू परिसर के समीप, ${districtName}`,
-        googleMapsUrl: `https://maps.google.com/?q=25.2818,82.9863`
+        googleMapsUrl: `https://maps.google.com/?q=25.2818,82.9863`,
+        qpCode
       }
     ]
   };
@@ -117,7 +132,11 @@ export function localFallbackProcess(transcript: string, districtName = "Varanas
       estimatedIncome: income
     },
     districtMarket,
-    friendlyAudioResponse: friendlyAudio
+    friendlyAudioResponse: friendlyAudio,
+    skillVectorHits: [qpCode],
+    employmentMode: "स्वरोजगार (Self-Employment)",
+    mobilityScope: "जिले के अंदर (15 किमी दायरा)",
+    pmAjaySubsidy: { amount: "₹50,000", nsqfLevel, eligible: true }
   };
 }
 
@@ -163,4 +182,330 @@ export async function syncOfflineInterviews(interviews: any[]): Promise<{ succes
     console.error("Sync request failed:", error);
     throw error;
   }
+}
+
+export async function transcribeAudioViaBhashini(
+  wavBase64: string,
+  language: LanguageCode = 'hi-IN'
+): Promise<{ success: boolean; transcript: string; error?: string }> {
+  try {
+    const res = await fetch(`${API_BASE}/bhashini/asr`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ audioBase64: wavBase64, language }),
+    });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      return { success: false, transcript: '', error: errData.error || `HTTP ${res.status}` };
+    }
+
+    const data = await res.json();
+    if (data.success && data.transcript) {
+      return { success: true, transcript: data.transcript };
+    }
+    return { success: false, transcript: '', error: 'No transcript in response' };
+  } catch (error: any) {
+    console.warn('[Bhashini ASR Client] Network error:', error.message);
+    return { success: false, transcript: '', error: error.message };
+  }
+}
+
+export async function synthesizeSpeechViaBhashini(
+  text: string,
+  language: LanguageCode = 'hi-IN'
+): Promise<{ success: boolean; audioBase64?: string; samplingRate?: number; error?: string }> {
+  try {
+    const res = await fetch(`${API_BASE}/bhashini/tts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, language }),
+    });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      return { success: false, error: errData.error || `HTTP ${res.status}` };
+    }
+
+    const data = await res.json();
+    if (data.success && data.audioBase64) {
+      return { success: true, audioBase64: data.audioBase64, samplingRate: data.samplingRate };
+    }
+    return { success: false, error: 'No audio in response' };
+  } catch (error: any) {
+    console.warn('[Bhashini TTS Client] Network error:', error.message);
+    return { success: false, error: error.message };
+  }
+}
+
+export async function generateQRToken(
+  beneficiaryName: string,
+  aadhaarMasked: string,
+  qpCode: string,
+  roleNameHi: string,
+  district: string
+): Promise<{ tokenId: string; qrSvg: string; qrDataUrl: string; beneficiaryName: string; aadhaarMasked: string; nsqfQpCode: string; nsqfRoleNameHi: string; district: string; generatedAt: number }> {
+  const tokenId = `tkt_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+  const now = Date.now();
+  const payload = {
+    tokenId,
+    beneficiaryName,
+    aadhaarMasked,
+    nsqfQpCode: qpCode,
+    nsqfRoleNameHi: roleNameHi,
+    district,
+    generatedAt: now,
+  };
+
+  const payloadJson = JSON.stringify(payload);
+
+  const [qrSvg, qrDataUrl] = await Promise.all([
+    QRCode.toString(payloadJson, { type: 'svg', errorCorrectionLevel: 'M', width: 512 }),
+    QRCode.toDataURL(payloadJson, {
+      errorCorrectionLevel: 'M',
+      width: 512,
+      margin: 2,
+      color: { dark: '#000000', light: '#FFFFFF' },
+    }),
+  ]);
+
+  try {
+    await fetch(`${API_BASE}/qr-tokens`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }).catch(() => {});
+  } catch (e) {
+    console.warn('[QR Token] Could not persist token on server:', e);
+  }
+
+  return { qrSvg, qrDataUrl, ...payload };
+}
+
+export async function verifyQRToken(
+  tokenId: string
+): Promise<{ success: boolean; token?: any; error?: string }> {
+  try {
+    const res = await fetch(`${API_BASE}/qr-tokens/${encodeURIComponent(tokenId)}`);
+    if (!res.ok) {
+      return { success: false, error: `HTTP ${res.status}` };
+    }
+    const data = await res.json();
+    if (data.success && data.token) {
+      return { success: true, token: data.token };
+    }
+    return { success: false, error: 'Token not found' };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
+export async function admitToCourse(tokenId: string): Promise<{ success: boolean; message: string }> {
+  try {
+    const res = await fetch(`${API_BASE}/qr-tokens/${encodeURIComponent(tokenId)}/admit`, {
+      method: 'POST',
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      return { success: false, message: errData.error || `HTTP ${res.status}` };
+    }
+    const data = await res.json();
+    return { success: data.success, message: data.message || 'Admission successful' };
+  } catch (error: any) {
+    return { success: false, message: error.message };
+  }
+}
+
+// ═══ F1 · Grievance Redressal Client ═══════════════════════════════════════
+
+export interface SubmitGrievanceInput {
+  issueType: GrievanceIssueType;
+  description: string;
+  captureMode: 'form' | 'voice';
+  language: LanguageCode;
+  metadata: GrievanceMetadata;
+}
+
+export async function submitGrievance(
+  input: SubmitGrievanceInput
+): Promise<{ success: boolean; ticket?: GrievanceTicket; message: string }> {
+  try {
+    const res = await fetch(`${API_BASE}/grievances`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return { success: false, message: data.error || `HTTP ${res.status}` };
+    }
+    return { success: true, ticket: data.ticket, message: data.message || 'शिकायत दर्ज हो गई।' };
+  } catch (error: any) {
+    return { success: false, message: error.message || 'नेटवर्क त्रुटि' };
+  }
+}
+
+export async function fetchGrievances(filter?: { status?: GrievanceStatus; district?: string }): Promise<GrievanceTicket[]> {
+  const params = new URLSearchParams();
+  if (filter?.status) params.set('status', filter.status);
+  if (filter?.district) params.set('district', filter.district);
+  const qs = params.toString();
+  const res = await fetch(`${API_BASE}/grievances${qs ? `?${qs}` : ''}`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+  return data.tickets || [];
+}
+
+export interface GrievanceSummary {
+  total: number;
+  open: number;
+  inReview: number;
+  resolved: number;
+  byIssueType: { issueType: GrievanceIssueType; label: string; count: number }[];
+  byDistrict: { district: string; count: number }[];
+  voiceVsForm: { voice: number; form: number };
+  lastUpdatedAt: number | null;
+}
+
+export async function fetchGrievanceSummary(): Promise<GrievanceSummary | null> {
+  try {
+    const res = await fetch(`${API_BASE}/grievances/summary`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.summary || null;
+  } catch {
+    return null;
+  }
+}
+
+export async function updateGrievanceStatus(
+  ticketId: string,
+  status: GrievanceStatus,
+  note?: string
+): Promise<{ success: boolean; ticket?: GrievanceTicket; message: string }> {
+  try {
+    const res = await fetch(`${API_BASE}/grievances/${encodeURIComponent(ticketId)}/status`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status, note }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { success: false, message: data.error || `HTTP ${res.status}` };
+    return { success: true, ticket: data.ticket, message: 'स्थिति अपडेट हो गई।' };
+  } catch (error: any) {
+    return { success: false, message: error.message || 'नेटवर्क त्रुटि' };
+  }
+}
+
+// ═══ F2 · Lifecycle Nudge Client ═══════════════════════════════════════════
+
+export async function enrollForLifecycleNudges(params: {
+  beneficiaryId: string;
+  beneficiaryName: string;
+  district: string;
+  whatsappNumber: string;
+  enrolledAt?: number;
+}): Promise<{ success: boolean; enrollment?: LifecycleEnrollment; whatsappConfigured?: boolean; message: string }> {
+  try {
+    const res = await fetch(`${API_BASE}/lifecycle/enroll`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { success: false, message: data.error || `HTTP ${res.status}` };
+    return {
+      success: true,
+      enrollment: data.enrollment,
+      whatsappConfigured: data.whatsappConfigured,
+      message: data.message || 'नामांकन सफल',
+    };
+  } catch (error: any) {
+    return { success: false, message: error.message || 'नेटवर्क त्रुटि' };
+  }
+}
+
+export async function fetchLifecycleEnrollment(
+  beneficiaryId: string
+): Promise<{ enrollment: LifecycleEnrollment | null; whatsappConfigured: boolean }> {
+  try {
+    const res = await fetch(`${API_BASE}/lifecycle/${encodeURIComponent(beneficiaryId)}`);
+    if (res.status === 404) return { enrollment: null, whatsappConfigured: false };
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    return { enrollment: data.enrollment || null, whatsappConfigured: !!data.whatsappConfigured };
+  } catch {
+    return { enrollment: null, whatsappConfigured: false };
+  }
+}
+
+/** All enrolled profiles with their WhatsApp threads — Ministry portal view. */
+export async function fetchLifecycleEnrollments(): Promise<LifecycleEnrollment[]> {
+  try {
+    const res = await fetch(`${API_BASE}/lifecycle`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.enrollments || [];
+  } catch {
+    return [];
+  }
+}
+
+/** Forces an immediate scheduler pass — used by the demo "Send now" control. */
+export async function triggerLifecycleSweep(): Promise<{ dispatchedCount: number; whatsappConfigured: boolean }> {
+  try {
+    const res = await fetch(`${API_BASE}/lifecycle/sweep`, { method: 'POST' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    return { dispatchedCount: data.dispatchedCount || 0, whatsappConfigured: !!data.whatsappConfigured };
+  } catch {
+    return { dispatchedCount: 0, whatsappConfigured: false };
+  }
+}
+
+export async function fetchLifecycleSchedule(): Promise<{  schedule: { key: string; dayOffset: number; label: string; labelHi: string }[];
+  whatsappConfigured: boolean;
+}> {
+  const res = await fetch(`${API_BASE}/lifecycle/schedule`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+// ═══ F3 · Post-Course Guidance Client ══════════════════════════════════════
+
+export async function markCourseComplete(params: {
+  beneficiaryId: string;
+  nsqfQpCode: string;
+  district: string;
+  completedAt?: number;
+}): Promise<{ success: boolean; completedAt?: number; message: string }> {
+  try {
+    const res = await fetch(`${API_BASE}/course/complete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { success: false, message: data.error || `HTTP ${res.status}` };
+    return {
+      success: true,
+      completedAt: data.record?.completedAt,
+      message: 'प्रशिक्षण पूर्ण हो गया।',
+    };
+  } catch (error: any) {
+    return { success: false, message: error.message || 'नेटवर्क त्रुटि' };
+  }
+}
+
+export async function fetchLocalEmployers(params: {
+  district: string;
+  qpCode: string;
+  nsqfLevel?: number;
+}): Promise<{ district: string; openings: PostTrainingJobOpening[]; exactMatches: number }> {
+  const query = new URLSearchParams({ district: params.district, qpCode: params.qpCode });
+  if (params.nsqfLevel) query.set('nsqfLevel', String(params.nsqfLevel));
+  const res = await fetch(`${API_BASE}/post-training/jobs?${query.toString()}`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+  return { district: data.district, openings: data.openings || [], exactMatches: data.exactMatches || 0 };
 }

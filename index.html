@@ -14,10 +14,12 @@
     <link rel="apple-touch-icon" href="/icons/icon-192.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
 
-    <!-- Google Fonts: Noto Sans and Noto Sans Devanagari (400, 600) strictly per design.md §3 -->
+    <!-- Google Fonts: Noto Sans + one family per supported Indic script (400, 600) per design.md §3.
+         Every script in the language picker needs its own face, otherwise Tamil, Telugu,
+         Malayalam, Bengali, Marathi and Maithili glyphs fall back to a missing-glyph box. -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari:wght@400;600&family=Noto+Sans:wght@400;600&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;600&family=Noto+Sans+Devanagari:wght@400;600&family=Noto+Sans+Maithili:wght@400;600&family=Noto+Sans+Malayalam:wght@400;600&family=Noto+Sans+Marathi:wght@400;600&family=Noto+Sans+Tamil:wght@400;600&family=Noto+Sans+Telugu:wght@400;600&family=Noto+Sans+Bengali:wght@400;600&display=swap" rel="stylesheet" />
     <!-- Leaflet CSS & JS for Interactive PM-AJAY Center Tracking Map -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>

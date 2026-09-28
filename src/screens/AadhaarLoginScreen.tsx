@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { SpeakerIcon, MicIcon } from '../components/Icons';
 import { speechService } from '../services/speech';
+import { getAadhaarText } from '../services/translations';
 
 export const AadhaarLoginScreen: React.FC = () => {
   const { submitAadhaarNumber, loginDemoBeneficiary, selectedLanguage } = useApp();
@@ -9,7 +10,9 @@ export const AadhaarLoginScreen: React.FC = () => {
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [isListeningVoice, setIsListeningVoice] = useState(false);
 
-  const guideText = "कृपया अपना 12 अंकों का आधार नंबर दर्ज करें या माइक बटन दबाकर बोलें।";
+  const t = (key: string) => getAadhaarText(selectedLanguage || 'hi-IN', key);
+
+  const guideText = t('aadhaarPrompt');
 
   const handlePlayVoice = () => {
     speechService.speak(
@@ -65,10 +68,10 @@ export const AadhaarLoginScreen: React.FC = () => {
         <div className="flex items-start justify-between">
           <div>
             <h1 className="font-display text-2xl text-ink">
-              आधार सत्यापन एवं लॉगिन
+              {t('aadhaarTitle')}
             </h1>
             <p className="font-caption text-sm text-ink-muted mt-1">
-              पीएम-अजय लाभार्थी प्रोफाइल व ₹50,000 सब्सिडी स्थिति
+              {t('aadhaarSubtitle')}
             </p>
           </div>
           <button
@@ -76,7 +79,7 @@ export const AadhaarLoginScreen: React.FC = () => {
             className={`w-11 h-11 rounded border flex items-center justify-center transition-colors ${
               isPlayingAudio ? 'bg-action text-white border-action' : 'bg-surface border-line text-trust'
             }`}
-            aria-label="निर्देश सुनें"
+            aria-label={t('aadhaarListenGuide')}
           >
             <SpeakerIcon size={20} color={isPlayingAudio ? '#FFFFFF' : '#009378'} />
           </button>
@@ -88,20 +91,20 @@ export const AadhaarLoginScreen: React.FC = () => {
             <SpeakerIcon size={16} color="#009378" />
           </div>
           <p className="text-xs text-ink leading-relaxed font-medium">
-            "कृपया अपना 12 अंकों का आधार नंबर दर्ज करें या बोलें"
+            "{t('aadhaarPrompt')}"
           </p>
         </div>
 
         {/* Aadhaar Number Display Box */}
         <div className="bg-white border-2 border-trust rounded-xl p-4 text-center shadow-sm">
           <span className="text-xs text-ink-muted uppercase font-bold tracking-wider block mb-1">
-            आधार संख्या (Aadhaar Number)
+            {t('aadhaarNumberLabel')}
           </span>
           <div className="text-2xl font-mono font-bold tracking-widest text-ink min-h-[36px]">
             {aadhaarInput ? formatAadhaar(aadhaarInput) : <span className="text-ink-muted opacity-40">____ ____ ____</span>}
           </div>
           <span className="text-[11px] text-ink-muted mt-1 block">
-            {aadhaarInput.length}/12 अंक दर्ज हुए
+            {aadhaarInput.length}/12 {t('aadhaarDigitsEntered')}
           </span>
         </div>
 
@@ -121,7 +124,7 @@ export const AadhaarLoginScreen: React.FC = () => {
               onClick={handleClear}
               className="bg-surface border border-line text-ink-muted rounded-lg text-xs font-bold hover:bg-black/5"
             >
-              साफ़ (Clear)
+              {t('aadhaarClear')}
             </button>
             <button
               onClick={() => handleKeyPress('0')}
@@ -133,7 +136,7 @@ export const AadhaarLoginScreen: React.FC = () => {
               onClick={handleBackspace}
               className="bg-surface border border-line text-alert rounded-lg text-xs font-bold hover:bg-alert/10"
             >
-              ⌫ हटाएं
+              ⌫ {t('aadhaarBackspace')}
             </button>
           </div>
 
@@ -148,7 +151,7 @@ export const AadhaarLoginScreen: React.FC = () => {
             }`}
           >
             <MicIcon size={18} color={isListeningVoice ? '#FFFFFF' : '#009378'} />
-            <span>{isListeningVoice ? 'आधार नंबर सुना जा रहा है...' : 'बोलकर आधार दर्ज करें (Speak Aadhaar)'}</span>
+            <span>{isListeningVoice ? t('aadhaarListening') : t('aadhaarSpeak')}</span>
           </button>
         </div>
 
@@ -174,7 +177,7 @@ export const AadhaarLoginScreen: React.FC = () => {
           disabled={aadhaarInput.length < 4}
           className={`btn-primary w-full ${aadhaarInput.length < 4 ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
-          ओटीपी प्राप्त करें (Send OTP)
+          {t('aadhaarSendOtp')}
         </button>
       </div>
     </div>

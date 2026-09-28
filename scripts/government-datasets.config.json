@@ -1,0 +1,88 @@
+{
+  "_comment": "Candidate Open Government Data Platform (data.gov.in) datasets for PMKK / ITI / PMKVY / SDC training centres. IMPORTANT: every resourceUuid below is an EMPTY STRING. I verified that each dataset TITLE and its data.gov.in resource/catalog slug is real (via search results and the live resource page), but I could NOT confirm the UUID — the new data.gov.in site is a client-rendered SPA whose resource pages return only boilerplate HTML, and its backend listing APIs (/backend/dms/v1, /backend/cust-api/v1/search) 302-redirect to a login wall. The UUID is only visible inside a successful api.data.gov.in response, which requires a key. So: DO NOT paste a UUID here unless you have copied it from a real api.data.gov.in response (or from the dataset page's API tab after logging in). A wrong UUID that 'works' is worse than an empty one — an empty UUID makes the importer fail loudly instead of silently pulling garbage.",
+  "_apiBase": "https://api.data.gov.in",
+  "_keyEnvVar": "OGD_API_KEY",
+  "_uuidGuidance": "To fill a UUID: register a free account at https://www.data.gov.in/ (Register -> get an API key), open the dataset page listed below, click the 'API' tab, and copy the UUID from the URL https://www.data.gov.in/resource/<uuid>?api-key=YOUR_KEY. Then paste it into the matching resourceUuid field and re-run `npm run data:fetch`.",
+  "_discoverGuidance": "Before pasting a UUID, validate it with: OGD_API_KEY=<key> npm run data:discover <uuid>. That fetches one page and prints the real field names plus a sample row, so you can fix the fieldMap candidates in this file against the actual columns. The /resource endpoint refuses requests without a key ('Authorization field missing'), so discover needs the key too.",
+  "_localGuidance": "To load a manually-downloaded CSV/JSON instead of the API, set 'localFile' (repo-relative path) on a dataset entry and run: npm run data:fetch:local. The same normaliser and district/state filters apply.",
+  "datasets": [
+    {
+      "name": "pmkvy_training_centre_statewise",
+      "resourceUuid": "",
+      "uuidStatus": "UNVERIFIED — needs user paste",
+      "title": "Training Centre State/UT-wise Details of Candidates Trained under Pradhan Mantri Kaushal Vikas Yojana (PMKVY) from 2019-20 to 2023-24",
+      "publisher": "Ministry of Skill Development and Entrepreneurship (MSDE) / NSDC",
+      "catalogSlug": "training-centre-stateut-wise-details-candidates-trained-under-pradhan-mantri-kaushal-vikas",
+      "resourceSlug": "training-centre-stateut-wise-details-candidates-trained-under-pradhan-mantri-kaushal-vikas",
+      "stateFilter": ["Uttar Pradesh", "Bihar", "Madhya Pradesh"],
+      "districtFilter": ["Varanasi", "Gorakhpur", "Jhansi", "Patna"],
+      "fieldMap": {
+        "centreName": ["centre_name", "training_centre", "centre", "institute_name", "iti_name", "name"],
+        "scheme": ["scheme", "pmkvy_phase", "programme"],
+        "trade": ["trade", "sector", "job_role", "qualification"],
+        "state": ["state", "state_name"],
+        "district": ["district", "district_name"],
+        "address": ["address", "location", "centre_address"],
+        "pincode": ["pincode", "postal_code", "zip"],
+        "latitude": ["latitude", "lat"],
+        "longitude": ["longitude", "lon", "lng"],
+        "coordinatorName": ["coordinator_name", "contact_person", "trainer_name"],
+        "phone": ["phone", "mobile", "contact_no", "coordinator_phone"],
+        "email": ["email", "email_id"],
+        "lastUpdated": ["updated", "updated_date", "last_updated"]
+      }
+    },
+    {
+      "name": "pmkvy_district_placed",
+      "resourceUuid": "",
+      "uuidStatus": "UNVERIFIED — needs user paste",
+      "title": "District wise enrolled, trained, assessed, certified & placed under PMKVY as on 21 April, 2022",
+      "publisher": "Ministry of Skill Development and Entrepreneurship (MSDE) / NSDC",
+      "catalogSlug": "msde-pradhan-mantri-kaushal-vikas-yojana-pmkvy",
+      "resourceSlug": "district-wise-enrolled-trained-assessed-certified-placed-under-pmkvy-21-april-2022",
+      "stateFilter": ["Uttar Pradesh", "Bihar", "Madhya Pradesh"],
+      "districtFilter": ["Varanasi", "Gorakhpur", "Jhansi", "Patna"],
+      "fieldMap": {
+        "centreName": ["centre_name", "training_centre", "centre", "institute_name", "name"],
+        "scheme": ["scheme", "programme"],
+        "trade": ["trade", "sector", "job_role"],
+        "state": ["state", "state_name"],
+        "district": ["district", "district_name"],
+        "address": ["address", "location"],
+        "pincode": ["pincode", "postal_code"],
+        "latitude": ["latitude", "lat"],
+        "longitude": ["longitude", "lon", "lng"],
+        "coordinatorName": ["coordinator_name", "contact_person"],
+        "phone": ["phone", "mobile", "contact_no"],
+        "email": ["email"],
+        "lastUpdated": ["updated", "updated_date", "last_updated"]
+      }
+    },
+    {
+      "name": "pmkvy_statewise_sdc_iti_count",
+      "resourceUuid": "",
+      "uuidStatus": "UNVERIFIED — needs user paste",
+      "title": "State/ UT-wise Number of Skill Development Centers under PMKVY, JSS, NAPS, and ITIs as on 31-12-2023",
+      "publisher": "Ministry of Skill Development and Entrepreneurship (MSDE)",
+      "catalogSlug": "msde-pradhan-mantri-kaushal-vikas-yojana-pmkvy",
+      "resourceSlug": "state-ut-wise-number-skill-development-centers-under-pmkvy-jss-naps-and-itis-31-12-2023",
+      "stateFilter": ["Uttar Pradesh", "Bihar", "Madhya Pradesh"],
+      "districtFilter": ["Varanasi", "Gorakhpur", "Jhansi", "Patna"],
+      "fieldMap": {
+        "centreName": ["centre_name", "skill_development_centre", "iti_name", "name"],
+        "scheme": ["scheme", "type"],
+        "trade": ["trade", "sector"],
+        "state": ["state", "state_name"],
+        "district": ["district", "district_name"],
+        "address": ["address", "location"],
+        "pincode": ["pincode"],
+        "latitude": ["latitude", "lat"],
+        "longitude": ["longitude", "lon", "lng"],
+        "coordinatorName": ["coordinator_name", "contact_person"],
+        "phone": ["phone", "mobile", "contact_no"],
+        "email": ["email"],
+        "lastUpdated": ["updated", "updated_date", "last_updated"]
+      }
+    }
+  ]
+}

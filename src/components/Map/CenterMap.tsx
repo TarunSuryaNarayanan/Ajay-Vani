@@ -11,13 +11,19 @@ declare global {
 interface CenterMapProps {
   centers: SkillingCenter[];
   selectedCenterId?: string;
-  onSelectCenter?: (center: SkillingCenter) => void;
+  onSelectCenter: (center: SkillingCenter) => void;
+  /** Live beneficiary GPS, when the user has granted location access. */
+  userLocation?: { lat: number; lon: number } | null;
+  /** Called when the user taps "My Location" — lets the screen re-prompt. */
+  onRecenter?: () => void;
 }
 
 export const CenterMap: React.FC<CenterMapProps> = ({
   centers,
   selectedCenterId,
   onSelectCenter,
+  userLocation,
+  onRecenter,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
@@ -32,6 +38,9 @@ export const CenterMap: React.FC<CenterMapProps> = ({
 
     const defaultLat = validCenters[0].latitude;
     const defaultLng = validCenters[0].longitude;
+
+    // Hoisted so the cleanup below can tear the user marker down too.
+    let userMarker: any = null;
 
     if (window.L && !mapInstanceRef.current) {
       try {
@@ -75,7 +84,24 @@ export const CenterMap: React.FC<CenterMapProps> = ({
         popupAnchor: [0, -34],
       });
 
-      const bounds: any[] = [];
+const bounds: any[] = [];
+
+      // Beneficiary's live location, when known. Rendered as a blue dot so the
+      // user can see which centres are actually nearby rather than trusting the
+      // hardcoded demo distances.
+      if (userLocation && window.L) {
+        const userIcon = window.L.divIcon({
+          className: 'user-location-pin',
+          html: `<div style="background-color: #1557A8; width: 22px; height: 22px; border-radius: 50%; border: 3px solid #ffffff; box-shadow: 0 0 0 3px rgba(21,87,168,0.25); display: flex; align-items: center; justify-content: center; color: white; font-size: 13px;">👤</div>`,
+          iconSize: [22, 22],
+          iconAnchor: [11, 22],
+          popupAnchor: [0, -22],
+        });
+        userMarker = window.L.marker([userLocation.lat, userLocation.lon], { icon: userIcon })
+          .addTo(map)
+          .bindPopup('<div style="font-family: sans-serif; font-size: 12px; padding: 4px;"><strong>आप यहाँ</strong><br/>आपका वर्तमान स्थान</div>');
+        bounds.push([userLocation.lat, userLocation.lon]);
+      }
 
       validCenters.forEach((center) => {
         const isSelected = center.id === selectedCenterId;
@@ -123,12 +149,15 @@ export const CenterMap: React.FC<CenterMapProps> = ({
     }
 
     return () => {
+      // Drop the user-location marker too — it is not in markersRef.
+      if (userMarker) userMarker.remove();
       if (mapInstanceRef.current) {
+        Object.values(markersRef.current).forEach((m: any) => mapInstanceRef.current.removeLayer(m));
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;
       }
     };
-  }, [centers, selectedCenterId]);
+  }, [centers, selectedCenterId, userLocation]);
 
   return (
     <div className="w-full space-y-2">
@@ -144,6 +173,17 @@ export const CenterMap: React.FC<CenterMapProps> = ({
             <span className="font-semibold text-ink mt-2">पीएम-अजय केंद्र लाइव लोकेशन नक्शा</span>
             <span className="mt-1">वास्तविक केंद्र GPS: {centers.map(c => c.nameHi || c.name).join(', ')}</span>
           </div>
+        )}
+        {window.L && userLocation && onRecenter && (
+          <button
+            type="button"
+            onClick={onRecenter}
+            className="absolute bottom-3 right-3 z-[1000] w-10 h-10 rounded-full bg-surface border border-line shadow flex items-center justify-center"
+            aria-label="अपना स्थान केंद्रित करें"
+            title="अपना स्थान केंद्रित करें"
+          >
+            <MapPinIcon size={18} color="#1557A8" />
+          </button>
         )}
       </div>
 

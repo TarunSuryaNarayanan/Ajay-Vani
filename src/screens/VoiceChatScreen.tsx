@@ -4,22 +4,26 @@ import { GramSahayakAvatar } from '../components/Avatar/GramSahayakAvatar';
 import { MicIcon, SpeakerIcon, AlertIcon } from '../components/Icons';
 import { speechService } from '../services/speech';
 import { WaveformVisualizer } from '../services/audioWaveform';
-import { processVoiceTranscript } from '../services/api';
+import { processVoiceTranscript, localFallbackProcess } from '../services/api';
+import { getUiText } from '../services/translations';
+import { LanguageCode } from '../types';
+import { packStateManager } from '../services/modelPackManager';
 
 const DISTRICTS = [
   { id: 'Varanasi', name: 'वाराणसी (Varanasi, UP)' },
   { id: 'Gorakhpur', name: 'गोरखपुर (Gorakhpur, UP)' },
-  { id: 'Bundelkhand', name: 'झांसी / बुंदेलखंड (Jhansi, UP)' },
+  { id: 'Jhansi', name: 'झांसी (Jhansi, UP)' },
   { id: 'Patna', name: 'पटना (Patna, Bihar)' }
 ];
 
 export const VoiceChatScreen: React.FC = () => {
   const { 
-    selectedLanguage, 
+    selectedLanguage,
     selectedDistrict, 
     setDistrict, 
     saveInterviewResult, 
-    setScreen 
+    setScreen,
+    isOnline
   } = useApp();
 
   const [isRecording, setIsRecording] = useState(false);
@@ -27,36 +31,42 @@ export const VoiceChatScreen: React.FC = () => {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [spokenPrompt, setSpokenPrompt] = useState('आपको किस काम का अनुभव है? आप क्या नया काम शुरू करना चाहते हैं?');
+  const [spokenPrompt, setSpokenPrompt] = useState('');
   const [lastAIResponse, setLastAIResponse] = useState<string | null>(null);
+  const [packState] = useState(() => packStateManager.getState(selectedLanguage || 'hi-IN'));
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const waveformRef = useRef<WaveformVisualizer | null>(null);
 
-  // Initial welcome greeting when screen loads
+    // Initial welcome greeting when screen loads
   useEffect(() => {
     waveformRef.current = new WaveformVisualizer();
 
-    const welcomeGreeting = selectedLanguage.includes('bho')
-      ? 'राम राम भाई! हम आपके ग्राम सहायक बानी। कृपया स्क्रीन पर दिहल लिस्ट से आपन जिला चुनीं और बताईं रउवा कवन काम के अनुभव बा?'
-      : selectedLanguage.includes('bun')
-      ? 'राम राम भइया! हम आपके ग्राम सहायक हैं। कृपया स्क्रीन पे दी गई लिस्ट से अपनो जिला चुनो और बताओ कौन सो काम सीखवे की इच्छा है?'
-      : 'नमस्ते! मैं आपका पीएम-अजय ग्राम सहायक हूँ। कृपया स्क्रीन पर दी गई सूची से अपना जिला चुनें और बताएं आपको किस काम का अनुभव है?';
+    // Every spoken string comes from translations, so the chosen language is
+    // what the user actually hears from the very first prompt.
+    const welcomeGreeting = getUiText(selectedLanguage as LanguageCode, 'welcomeGreeting');
+    const districtPrompt = getUiText(selectedLanguage as LanguageCode, 'districtAudioPrompt');
 
     setSpokenPrompt(welcomeGreeting);
 
-    // Give a short gentle audio prompt
-    const timer = setTimeout(() => {
+    const districtTimer = setTimeout(() => {
       speechService.speak(
-        welcomeGreeting, 
+        districtPrompt,
         selectedLanguage,
-        () => setIsSpeaking(true),
-        () => setIsSpeaking(false)
+        () => {},
+        () => {
+          speechService.speak(
+            welcomeGreeting,
+            selectedLanguage,
+            () => setIsSpeaking(true),
+            () => setIsSpeaking(false)
+          );
+        }
       );
-    }, 600);
+    }, 300);
 
     return () => {
-      clearTimeout(timer);
+      clearTimeout(districtTimer);
       speechService.stopSpeaking();
       speechService.stopListening();
       if (waveformRef.current) {
@@ -123,10 +133,8 @@ export const VoiceChatScreen: React.FC = () => {
     if (waveformRef.current) {
       waveformRef.current.stop();
     }
-
-    if (transcript.trim().length > 3) {
-      handleSpeechCompleted(transcript);
-    }
+    // ASR result arrives via onResult callback in handleStartRecord
+    // which calls handleSpeechCompleted when isFinal is true
   };
 
 
@@ -137,8 +145,8 @@ export const VoiceChatScreen: React.FC = () => {
       waveformRef.current.stop();
     }
 
-    if (!spokenText || spokenText.trim().length < 2) {
-      setErrorMessage("कोई आवाज सुनाई नहीं दी। कृपया बटन दबाकर दोबारा बोलें।");
+      if (!spokenText || spokenText.trim().length < 2) {
+      setErrorMessage(uiTexts.noAudio);
       return;
     }
 
@@ -169,7 +177,24 @@ export const VoiceChatScreen: React.FC = () => {
         }
       );
     } catch (err: any) {
-      setErrorMessage("सर्वर से उत्तर प्राप्त नहीं हुआ। कृपया दोबारा प्रयास करें।");
+      setErrorMessage(null);
+      try {
+        const fallbackResult = localFallbackProcess(spokenText, selectedDistrict, selectedLanguage);
+        setLastAIResponse(fallbackResult.friendlyAudioResponse);
+        setSpokenPrompt(fallbackResult.friendlyAudioResponse);
+        speechService.speak(
+          fallbackResult.friendlyAudioResponse,
+          selectedLanguage,
+          () => setIsSpeaking(true),
+          async () => {
+            setIsSpeaking(false);
+            await saveInterviewResult(fallbackResult, spokenText);
+            setScreen('nsqf-profile');
+          }
+        );
+      } catch (fallbackErr) {
+        setErrorMessage(uiTexts.serverError);
+      }
     } finally {
       setIsProcessing(false);
     }
@@ -192,12 +217,31 @@ export const VoiceChatScreen: React.FC = () => {
     handleSpeechCompleted(text);
   };
 
+  const uiTexts = {
+    districtLabel: getUiText(selectedLanguage as LanguageCode, 'districtLabel'),
+    tapToSpeak: getUiText(selectedLanguage as LanguageCode, 'tapToSpeak'),
+    listening: getUiText(selectedLanguage as LanguageCode, 'listening'),
+    processing: getUiText(selectedLanguage as LanguageCode, 'processing'),
+    transcriptLabel: getUiText(selectedLanguage as LanguageCode, 'transcriptLabel'),
+    transcriptPlaceholder: getUiText(selectedLanguage as LanguageCode, 'transcriptPlaceholder'),
+    samplePhrases: getUiText(selectedLanguage as LanguageCode, 'samplePhrases'),
+    replayAudio: getUiText(selectedLanguage as LanguageCode, 'replayAudio'),
+    stopRecording: getUiText(selectedLanguage as LanguageCode, 'stopRecording'),
+    noAudio: getUiText(selectedLanguage as LanguageCode, 'noAudioDetected'),
+    serverError: getUiText(selectedLanguage as LanguageCode, 'serverError'),
+    samplePhrasesList: [
+      getUiText(selectedLanguage as LanguageCode, 'samplePhrase1'),
+      getUiText(selectedLanguage as LanguageCode, 'samplePhrase2'),
+      getUiText(selectedLanguage as LanguageCode, 'samplePhrase3'),
+    ],
+  };
+
   return (
     <div className="flex-1 flex flex-col justify-between p-5 items-center text-center">
       {/* Top District Selector */}
       <div className="w-full flex items-center justify-between text-xs text-ink-muted mb-2">
         <label htmlFor="district-select" className="font-caption">
-          जिले का चयन करें:
+          {uiTexts.districtLabel}
         </label>
         <select
           id="district-select"
@@ -213,6 +257,13 @@ export const VoiceChatScreen: React.FC = () => {
         </select>
       </div>
 
+      {/* Mode Indicator (E23) — Local vs Enhanced */}
+      <div className="flex items-center justify-center mb-2">
+        <span className={`mode-badge ${isOnline && packState !== 'ready' ? 'mode-enhanced' : packState === 'ready' ? 'mode-local' : 'mode-enhanced'}`}>
+          {isOnline && packState !== 'ready' ? 'Enhanced' : packState === 'ready' ? 'Local' : 'Enhanced'}
+        </span>
+      </div>
+
       {/* Illustrated Gram Sahayak Avatar per design.md §5 */}
       <div className="my-2 flex flex-col items-center">
         <GramSahayakAvatar isSpeaking={isSpeaking} size={118} />
@@ -226,10 +277,10 @@ export const VoiceChatScreen: React.FC = () => {
         <button
           onClick={handleReplayAudio}
           className="mt-2 inline-flex items-center space-x-1.5 text-xs text-trust hover:text-trust/80 font-semibold cursor-pointer"
-          aria-label="फिर से सुनें"
+          aria-label={uiTexts.replayAudio}
         >
           <SpeakerIcon size={16} color="#009378" />
-          <span>फिर से सुनें (Listen again)</span>
+          <span>{uiTexts.replayAudio}</span>
         </button>
       </div>
 
@@ -238,7 +289,7 @@ export const VoiceChatScreen: React.FC = () => {
         <button
           onClick={handleToggleRecord}
           disabled={isProcessing}
-          aria-label={isRecording ? "रिकॉर्डिंग रोकें" : "बोलने के लिए दबाएं"}
+           aria-label={isRecording ? uiTexts.stopRecording : uiTexts.tapToSpeak}
           className={`btn-mic ${isRecording ? 'recording' : ''} ${
             isProcessing ? 'opacity-60 cursor-wait' : 'hover:opacity-95'
           }`}
@@ -247,10 +298,10 @@ export const VoiceChatScreen: React.FC = () => {
         </button>
         <span className="font-caption text-ink font-semibold mt-3 text-sm">
           {isProcessing
-            ? "आवाज का विश्लेषण हो रहा है..."
-            : isRecording
-            ? "सुन रहे हैं, अपनी बात कहें (Tap to finish)"
-            : "बोलने के लिए दबाएं (Tap to Speak)"}
+             ? uiTexts.processing
+             : isRecording
+             ? uiTexts.listening
+             : uiTexts.tapToSpeak}
         </span>
       </div>
 
@@ -266,12 +317,12 @@ export const VoiceChatScreen: React.FC = () => {
 
       {/* Live Transcript Display Box */}
       <div className="w-full max-w-[420px] min-h-[64px] rounded-card border border-line bg-white/70 p-3 text-left">
-        <span className="font-caption text-xs text-ink-muted block mb-1">
-          पहचाने गए शब्द (Spoken Transcript):
-        </span>
-        <p className="text-sm sm:text-base text-ink italic leading-snug">
-          {transcript ? `"${transcript}"` : "माइक्रोफ़ोन पर टैप करके अपनी बात बोलें..."}
-        </p>
+         <span className="font-caption text-xs text-ink-muted block mb-1">
+           {uiTexts.transcriptLabel}
+         </span>
+         <p className="text-sm sm:text-base text-ink italic leading-snug">
+           {transcript ? `"${transcript}"` : uiTexts.transcriptPlaceholder}
+         </p>
       </div>
 
       {/* Error / Alert feedback */}
@@ -285,27 +336,18 @@ export const VoiceChatScreen: React.FC = () => {
       {/* Rural Sample Voice Prompts (Quick taps for testing/zero-typing) */}
       <div className="w-full max-w-[420px] mt-3 pt-3 border-t border-line text-left">
         <span className="font-caption text-xs text-ink-muted block mb-1.5 font-medium">
-          उदाहरण वाक्य (Tap to test):
+           {uiTexts.samplePhrases}
         </span>
         <div className="flex flex-col space-y-1.5">
-          <button
-            onClick={() => handleSamplePhrase("मेरा नाम रमेश है, मैं गांव में बिजली का काम करता हूँ और सोलर सीखना चाहता हूँ।")}
-            className="text-left text-xs p-2 rounded border border-line hover:border-trust bg-white text-ink active:bg-surface"
-          >
-            "मेरा नाम रमेश है, मैं गांव में बिजली का काम करता हूँ और सोलर सीखना चाहता हूँ।"
-          </button>
-          <button
-            onClick={() => handleSamplePhrase("हमार नाम श्यामू बा, हम गाय भैंस पालेनी और डेयरी के व्यवसाय बढ़ावे के बा।")}
-            className="text-left text-xs p-2 rounded border border-line hover:border-trust bg-white text-ink active:bg-surface"
-          >
-            "हमार नाम श्यामू बा, हम गाय भैंस पालेनी और डेयरी के व्यवसाय बढ़ावे के बा।"
-          </button>
-          <button
-            onClick={() => handleSamplePhrase("मेरा नाम रीता है, मैं साड़ी पर जरी जरदोजी और सिलाई का काम करती हूँ।")}
-            className="text-left text-xs p-2 rounded border border-line hover:border-trust bg-white text-ink active:bg-surface"
-          >
-            "मेरा नाम रीता है, मैं साड़ी पर जरी जरदोजी और सिलाई का काम करती हूँ।"
-          </button>
+          {uiTexts.samplePhrasesList.map((phrase) => (
+            <button
+              key={phrase}
+              onClick={() => handleSamplePhrase(phrase)}
+              className="text-left text-xs p-2 rounded border border-line hover:border-trust bg-white text-ink active:bg-surface"
+            >
+              "{phrase}"
+            </button>
+          ))}
         </div>
       </div>
     </div>

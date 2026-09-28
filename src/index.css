@@ -18,17 +18,38 @@
   box-sizing: border-box;
 }
 
+/* One face per supported Indic script, listed after the Latin face so a glyph
+   missing from Noto Sans falls through to the script-specific family. */
+:root {
+  --font-app: 'Noto Sans', 'Noto Sans Devanagari', 'Noto Sans Maithili', 'Noto Sans Tamil',
+    'Noto Sans Telugu', 'Noto Sans Malayalam', 'Noto Sans Marathi', 'Noto Sans Bengali',
+    'Nirmala UI', 'Kohinoor Bangla', 'Lohit Tamil', system-ui, -apple-system,
+    BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
 body {
   margin: 0;
   padding: 0;
   background-color: #F6F6F6;
   color: #14231F;
-  font-family: 'Noto Sans', 'Noto Sans Devanagari', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: var(--font-app);
   font-size: 18px;
   line-height: 26px;
   font-weight: 400;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* Indic scripts need taller lines than Latin at the same size */
+  line-break: normal;
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
+
+/* font-family is inherited, so every screen picks up the full Indic stack from body. */
+
+/* Complex scripts need breathing room or conjuncts clip at small sizes. */
+:lang(ta), :lang(te), :lang(ml), :lang(bn), :lang(mr), :lang(mai), :lang(bho), :lang(bun), :lang(chg), :lang(h) {
+  line-height: 1.7;
+  letter-spacing: 0;
 }
 
 /* Typography Scale per design.md §3 */
@@ -118,6 +139,20 @@ body {
   }
 }
 
+/* Side panel slide-over */
+@keyframes slide-in-right {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.animate-slide-in {
+  animation: slide-in-right 0.22s ease-out;
+}
+
 /* Card Styling per design.md §5: 8px radius, 1px hairline border, no drop shadow */
 .card-flat {
   border-radius: 8px;
@@ -140,4 +175,23 @@ a:focus-visible, button:focus-visible, [tabindex]:focus-visible {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* Mode Indicator (E23) — Local vs Enhanced */
+.mode-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: 16px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+}
+.mode-local {
+  background-color: var(--color-positive);
+  color: #FFFFFF;
+}
+.mode-enhanced {
+  background-color: var(--color-trust);
+  color: #FFFFFF;
 }

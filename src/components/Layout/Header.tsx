@@ -1,21 +1,27 @@
 import React from 'react';
 import { useApp } from '../../context/AppContext';
-import { ArrowBackIcon, SyncIcon } from '../Icons';
+import { ArrowBackIcon, SyncIcon, BriefcaseIcon } from '../Icons';
+import { getDashboardText } from '../../services/translations';
 
 export const Header: React.FC = () => {
-  const { 
-    currentScreen, 
-    setScreen, 
-    selectedDialectName, 
-    unsyncedCount, 
-    isOnline, 
-    isAadhaarLoggedIn 
+  const {
+    currentScreen,
+    setScreen,
+    selectedDialectName,
+    unsyncedCount,
+    pendingGrievanceCount,
+    isOnline,
+    isAadhaarLoggedIn,
+    selectedLanguage,
+    openServicesPanel
   } = useApp();
+
+  const t = (key: string) => getDashboardText(selectedLanguage || 'hi-IN', key);
 
   const handleBack = () => {
     switch (currentScreen) {
       case 'voice-chat':
-        setScreen('language-select');
+        setScreen(isAadhaarLoggedIn ? 'aadhaar-login' : 'language-select');
         break;
       case 'nsqf-profile':
         setScreen('voice-chat');
@@ -37,6 +43,12 @@ export const Header: React.FC = () => {
         break;
       case 'beneficiary-dashboard':
         setScreen('language-select');
+        break;
+      case 'post-training-guidance':
+        setScreen('beneficiary-dashboard');
+        break;
+      case 'ministry-dashboard':
+        setScreen('beneficiary-dashboard');
         break;
       default:
         setScreen('language-select');
@@ -69,6 +81,31 @@ export const Header: React.FC = () => {
       </div>
 
       <div className="flex items-center space-x-1.5">
+        {/* Complaints · Training lifecycle · QR token (side panel) */}
+        <button
+          onClick={() => openServicesPanel()}
+          className="px-2 py-1 rounded bg-black/20 text-surface hover:bg-black/30 text-xs font-bold flex items-center space-x-1"
+          aria-label={t('panelTitle')}
+        >
+          <BriefcaseIcon size={13} color="#F6F6F6" />
+          <span className="hidden sm:inline">{t('panelButton')}</span>
+        </button>
+
+        {/* Ministry Monitoring Dashboard access (F1 grievance destination) */}
+        <button
+          onClick={() => setScreen('ministry-dashboard')}
+          className="relative px-2 py-1 rounded bg-black/20 text-surface hover:bg-black/30 text-xs font-bold"
+          aria-label="मंत्रालय निगरानी डैशबोर्ड"
+        >
+          <span>🏛️</span>
+          <span className="hidden sm:inline"> मंत्रालय</span>
+          {pendingGrievanceCount > 0 && (
+            <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-action text-surface text-[10px] font-bold flex items-center justify-center">
+              {pendingGrievanceCount}
+            </span>
+          )}
+        </button>
+
         {/* Aadhaar Dashboard Button */}
         <button
           onClick={() => setScreen(isAadhaarLoggedIn ? 'beneficiary-dashboard' : 'aadhaar-login')}
