@@ -3,6 +3,8 @@
   "_apiBase": "https://api.data.gov.in",
   "_keyEnvVar": "OGD_API_KEY",
   "_uuidGuidance": "To fill a UUID: register a free account at https://www.data.gov.in/ (Register -> get an API key), open the dataset page listed below, click the 'API' tab, and copy the UUID from the URL https://www.data.gov.in/resource/<uuid>?api-key=YOUR_KEY. Then paste it into the matching resourceUuid field and re-run `npm run data:fetch`.",
+  "_discoverGuidance": "Before pasting a UUID, validate it with: OGD_API_KEY=<key> npm run data:discover <uuid>. That fetches one page and prints the real field names plus a sample row, so you can fix the fieldMap candidates in this file against the actual columns. The /resource endpoint refuses requests without a key ('Authorization field missing'), so discover needs the key too.",
+  "_localGuidance": "To load a manually-downloaded CSV/JSON instead of the API, set 'localFile' (repo-relative path) on a dataset entry and run: npm run data:fetch:local. The same normaliser and district/state filters apply.",
   "datasets": [
     {
       "name": "pmkvy_training_centre_statewise",

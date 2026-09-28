@@ -123,12 +123,82 @@ export const SkillingJobsScreen: React.FC = () => {
     };
   }, [selectedDistrict]);
 
-  // Fix #1: Explicit "Find Nearest Centers" button — centers are not displayed
-  // until the user explicitly clicks the button.
-  const handleFindCenters = () => {
+  // Live beneficiary location, requested only when the user explicitly asks
+  // for nearby centres. We never pre-fetch GPS behind the button.
+  const [userLocation, setUserLocation] = useState<{ lat: number; lon: number } | null>(null);
+  const [locating, setLocating] = useState(false);
+  const [locatingError, setLocatingError] = useState<string | null>(null);
+
+  const requestUserLocation = (): Promise<{ lat: number; lon: number } | null> => {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+      return Promise.resolve(null);
+    }
+    return new Promise((resolve) => {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
+        () => resolve(null),
+        { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 }
+      );
+    });
+  };
+
+  // Fix #1: Explicit "Find Nearest Centers" button — centres are not displayed
+  // until the user explicitly clicks the button. The button also asks the
+  // browser for the beneficiary's live location so distances are real.
+  const handleFindCenters = async () => {
+    setLocatingError(null);
+    setLocating(true);
+    const loc = await requestUserLocation();
+    if (loc) {
+      setUserLocation(loc);
+      // Re-fetch with the live GPS attached so the server computes haversine
+      // distances instead of returning the static demo values.
+      const district = selectedDistrict || 'Varanasi';
+      const url = `/api/centres?district=${encodeURIComponent(district)}&lat=${loc.lat}&lon=${loc.lon}`;
+      try {
+        const res = await fetch(url);
+        const data: CentreResponse = await res.json();
+        if (data?.success && Array.isArray(data.centres) && data.centres.length) {
+          setDistrictCentres(data.centres as SkillingCenter[]);
+          setCentreSource(data.source);
+          setProvenance(data.provenance);
+          setSourceNotice(data.source === 'demo' ? data.notice || null : null);
+          announceNearest(data.centres);
+        } else {
+          setDistrictCentres(defaultRegistry.centers);
+          setCentreSource('demo');
+          setProvenance(null);
+          setSourceNotice('Centre list could not be loaded from the server. Showing built-in demo centres.');
+          announceNearest(defaultRegistry.centers);
+        }
+      } catch {
+        setDistrictCentres(defaultRegistry.centers);
+        setCentreSource('demo');
+        setProvenance(null);
+        setSourceNotice('Centre list could not be loaded from the server. Showing built-in demo centres.');
+        announceNearest(defaultRegistry.centers);
+      }
+    } else {
+      setLocatingError('अपना स्थान नहीं मिल पाया। डिफ़ॉल्ट दूरियां दिखाई जा रही हैं।');
+      setDistrictCentres(defaultRegistry.centers);
+      setCentreSource('demo');
+      setProvenance(null);
+      announceNearest(defaultRegistry.centers);
+    }
+    setLocating(false);
     setCentersLoaded(true);
+  };
+
+  // Speak the nearest centre from a freshly fetched list. The reconcile effect
+  // below sorts by QP match first, so the nearest spoken here is the closest
+  // overall — which is what a beneficiary actually asks for.
+  const announceNearest = (centers: SkillingCenter[]) => {
+    const sorted = [...centers].sort(
+      (a, b) => (a.distanceKm || 999) - (b.distanceKm || 999)
+    );
+    const nearest = sorted[0];
     speechService.speak(
-      `आपके जिले ${districtMarket.district} में ${reconciledCenters.length} प्रशिक्षण केंद्र दर्ज हैं। सबसे नजदीकी ${reconciledCenters[0]?.name || reconciledCenters[0]?.nameHi || 'केंद्र'} ${reconciledCenters[0]?.distanceKm || 5.2} किमी दूर है।`,
+      `आपके जिले ${districtMarket.district} में ${centers.length} प्रशिक्षण केंद्र दर्ज हैं। सबसे नजदीकी ${nearest?.name || nearest?.nameHi || 'केंद्र'} ${nearest?.distanceKm || 5.2} किमी दूर है।`,
       selectedLanguage,
       () => setIsPlayingAudio(true),
       () => setIsPlayingAudio(false)
@@ -150,6 +220,13 @@ export const SkillingJobsScreen: React.FC = () => {
   };
 
   const activeSelectedCenter = displayedCenters.find(c => c.id === selectedCenterId) || displayedCenters[0];
+
+  // A centre dataset does not always publish coordinates, so distanceKm can
+  // legitimately be null. Format it for display rather than rendering "null".
+  const formatDistance = (km: number | null | undefined): string => {
+    if (km == null || !Number.isFinite(km)) return 'दूरी उपलब्ध नहीं';
+    return `${km.toFixed(1)} किमी`;
+  };
 
   const handleEnrollToCourse = () => {
     speechService.stopSpeaking();
@@ -230,12 +307,18 @@ export const SkillingJobsScreen: React.FC = () => {
             <p className="font-caption text-xs text-ink-muted text-center">
               नीचे दिए गए बटन दबाकर अपने जिले के नजदीकी प्रशिक्षण केंद्र खोजें।
             </p>
+            {locatingError && (
+              <p className="text-xs text-alert text-center">{locatingError}</p>
+            )}
             <button
               onClick={handleFindCenters}
               className="btn-primary w-full space-x-2"
+              disabled={locating}
             >
               <SearchIcon size={18} color="#FFFFFF" />
-              <span>नजदीकी केंद्र खोजें (Find Nearest Centers)</span>
+              <span>
+                {locating ? 'अपना स्थान खोज रहा है…' : 'नजदीकी केंद्र खोजें (Find Nearest Centers)'}
+              </span>
             </button>
           </div>
         ) : (
@@ -257,6 +340,8 @@ export const SkillingJobsScreen: React.FC = () => {
                   centers={displayedCenters}
                   selectedCenterId={selectedCenterId || activeSelectedCenter?.id}
                   onSelectCenter={(center: SkillingCenter) => setSelectedCenterId(center.id)}
+                  userLocation={userLocation}
+                  onRecenter={handleFindCenters}
                 />
               ) : (
                 <div className="card-flat bg-white border-line p-4 text-center">
@@ -302,7 +387,7 @@ export const SkillingJobsScreen: React.FC = () => {
                         </div>
                       </div>
                       <span className="shrink-0 bg-surface border border-line text-ink font-semibold text-xs px-2 py-1 rounded">
-                        {center.distanceKm} किमी दूर
+                        {formatDistance(center.distanceKm)}
                       </span>
                     </div>
 

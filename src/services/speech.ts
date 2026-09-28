@@ -9,10 +9,12 @@ import {
 } from './modelPackManager';
 import { packDownloader } from './packDownloader';
 import { transcribeWavBase64 } from './localAsr';
+import { webSpeechAsrService, webSpeechErrorMessage } from './webSpeechAsr';
 
 let onnxruntime: any = null;
 
 export const TTS_UNAVAILABLE_EVENT = 'ajay-vani:tts-unavailable';
+export const ASR_FALLBACK_EVENT = 'ajay-vani:asr-web-speech-fallback';
 
 /**
  * Fired whenever speak() finds no backend, so any screen with a speaker button can
@@ -23,11 +25,23 @@ function announceTtsUnavailable(lang: LanguageCode) {
   window.dispatchEvent(new CustomEvent(TTS_UNAVAILABLE_EVENT, { detail: { lang } }));
 }
 
+/**
+ * Fired when the local and cloud recognisers both come back empty and the
+ * browser's own recogniser takes over, so the UI can ask the beneficiary to
+ * repeat instead of appearing to hang.
+ */
+function announceAsrFallback(lang: LanguageCode) {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent(ASR_FALLBACK_EVENT, { detail: { lang } }));
+}
+
 export interface BhashiniASRResult {
   success: boolean;
   transcript: string;
   confidence?: number;
-  source: 'bhashini' | 'onnx' | 'fallback';
+  source: 'bhashini' | 'onnx' | 'webspeech' | 'fallback';
+  /** Human-readable reason, surfaced in place of the generic retry message. */
+  error?: string;
 }
 
 export class SpeechService {
@@ -42,12 +56,22 @@ export class SpeechService {
   } | null = null;
   private currentLang: LanguageCode = 'hi-IN';
   private audioCaptureActive: boolean = false;
+  private webSpeechActive: boolean = false;
 
   public isSupported(): boolean {
     return typeof window !== 'undefined' &&
       typeof navigator !== 'undefined' &&
       !!navigator.mediaDevices?.getUserMedia &&
       typeof MediaRecorder !== 'undefined';
+  }
+
+  /**
+   * True when the browser ships its own recogniser. It is only ever used as a
+   * last resort: it needs a live microphone and a network round trip, so it
+   * cannot be the offline default.
+   */
+  public isWebSpeechSupported(): boolean {
+    return webSpeechAsrService.isSupported();
   }
 
   public isTTSSupported(): boolean {
@@ -88,11 +112,11 @@ export class SpeechService {
           onEnd();
           return;
         }
-        const result = await this.recognizeWithFallback(wavBase64, lang);
+        const result = await this.recognizeOrRetryWithWebSpeech(wavBase64, lang, onSpeechStart);
         if (result.success && result.transcript) {
           onResult(result.transcript, true);
         } else {
-          onError('आपकी आवाज़ समझ में नहीं आई। कृपया धीरे और स्पष्ट बोलें।');
+          onError(result.error || 'आपकी आवाज़ समझ में नहीं आई। कृपया धीरे और स्पष्ट बोलें।');
         }
         this.audioCaptureActive = false;
         onEnd();
@@ -140,6 +164,59 @@ export class SpeechService {
       transcript: '',
       source: 'fallback',
     };
+  }
+
+  /**
+   * Every blob-based engine came back empty. Rather than give up, hand the turn
+   * to the browser's own recogniser and ask the user to repeat: on a low-end
+   * device that could not load Whisper, a working cloud recogniser is far
+   * better than a dead microphone button.
+   *
+   * The microphone is already released by the time this runs (the VAD path
+   * calls `handleManualStop` first), so the Web Speech API can claim it. If the
+   * browser has no recogniser, or the user stays silent on the second pass, the
+   * original failure is returned untouched.
+   */
+  private async recognizeOrRetryWithWebSpeech(
+    wavBase64: string,
+    lang: LanguageCode,
+    onSpeechStart?: () => void
+  ): Promise<BhashiniASRResult> {
+    const result = await this.recognizeWithFallback(wavBase64, lang);
+    if (result.success || !webSpeechAsrService.isSupported()) {
+      return result;
+    }
+
+    console.warn('[SpeechService] Local and cloud ASR failed; retrying with the browser recogniser');
+    announceAsrFallback(lang);
+
+    this.webSpeechActive = true;
+    this.audioCaptureActive = true;
+    let webResult;
+    try {
+      webResult = await webSpeechAsrService.recognize(lang, { onSpeechStart });
+    } finally {
+      this.webSpeechActive = false;
+      this.audioCaptureActive = false;
+    }
+
+    if (webResult.success && webResult.transcript) {
+      return {
+        success: true,
+        transcript: webResult.transcript,
+        source: 'webspeech',
+        ...(webResult.confidence !== undefined ? { confidence: webResult.confidence } : {}),
+      };
+    }
+
+    // A specific reason from the browser ("microphone blocked", "no network")
+    // tells the beneficiary far more than the generic "not understood".
+    const reason = webResult.error ? webSpeechErrorMessage(webResult.error) : null;
+    if (reason) {
+      console.warn('[SpeechService] Browser recogniser failed:', webResult.error);
+    }
+
+    return { ...result, ...(reason ? { error: reason } : {}) };
   }
 
   private async tryBhashiniASR(
@@ -244,6 +321,13 @@ export class SpeechService {
   }
 
   public async stopListening(): Promise<void> {
+    // A browser-recogniser retry is mid-flight: it owns the callbacks and will
+    // dispatch its own result, so only the recogniser needs stopping here.
+    if (this.webSpeechActive) {
+      await webSpeechAsrService.stop();
+      return;
+    }
+
     if (!this.vadCallbacks) return;
 
     this.audioCaptureActive = false;
@@ -253,11 +337,15 @@ export class SpeechService {
     const wavBase64 = await audioCaptureService.handleManualStop();
 
     if (wavBase64) {
-      const result = await this.recognizeWithFallback(wavBase64, this.currentLang || 'hi-IN');
+      const result = await this.recognizeOrRetryWithWebSpeech(
+        wavBase64,
+        this.currentLang || 'hi-IN',
+        callbacks.onSpeechStart
+      );
       if (result.success && result.transcript) {
         callbacks.onResult(result.transcript, true);
       } else {
-        callbacks.onError('आवाज़ समझ में नहीं आई। कृपया दोबारा कोश करें।');
+        callbacks.onError(result.error || 'आवाज़ समझ में नहीं आई। कृपया दोबारा कोश करें।');
       }
     } else {
       callbacks.onError('आवाज़ कॅप्चर नहीं हुई। कृपया दोबारा कोश करें।');

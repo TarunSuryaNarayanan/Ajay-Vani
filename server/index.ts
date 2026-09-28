@@ -35,6 +35,7 @@ import {
 import { isWhatsAppConfigured, normaliseWhatsAppNumber, parseInboundWhatsApp } from './services/whatsapp';
 import { buildSpokenResponse, normaliseSpokenName } from '../src/services/spokenResponse';
 import { searchGovernmentCentres } from './data/centres/governmentCentres';
+import { attachDistances } from './data/centres/distance';
 import { LanguageCode } from '../src/types';
 
 // Load .env credentials for Bhashini
@@ -1028,6 +1029,15 @@ app.get('/api/centres', (req: Request, res: Response) => {
   const district = String(req.query.district || '').trim();
   const scheme = String(req.query.scheme || '').trim();
   const limit = Math.min(Number(req.query.limit) || 100, 500);
+  // Optional caller GPS. When present, every centre gets a real haversine
+  // distance computed against the beneficiary's live location instead of the
+  // static `distanceKm` baked into the demo rows.
+  const userLat = req.query.lat != null ? Number(req.query.lat) : null;
+  const userLon = req.query.lon != null ? Number(req.query.lon) : null;
+  const userLocation =
+    userLat != null && userLon != null && Number.isFinite(userLat) && Number.isFinite(userLon)
+      ? { lat: userLat, lon: userLon }
+      : null;
 
   if (!district) {
     return res.status(400).json({ success: false, error: 'district is required.' });
@@ -1042,7 +1052,17 @@ app.get('/api/centres', (req: Request, res: Response) => {
       provenance: gov.provenance,
       district,
       count: gov.centres.length,
-      centres: gov.centres,
+      centres: attachDistances(
+        gov.centres.map((c) => ({
+          id: c.centreId || c.centreName,
+          name: c.centreName,
+          latitude: c.latitude,
+          longitude: c.longitude,
+        })),
+        userLocation?.lat ?? null,
+        userLocation?.lon ?? null
+      ).map((d) => ({ ...gov.centres.find((c) => c.centreId === d.centreId)!, distanceKm: d.distanceKm })),
+      userLocation,
     });
   }
 
@@ -1067,6 +1087,7 @@ app.get('/api/centres', (req: Request, res: Response) => {
       district,
       count: 0,
       centres: [],
+      userLocation,
       notice: gov.provenance
         ? 'No centre found for this district in the loaded data.gov.in snapshot, and no demo entry exists either.'
         : 'No data.gov.in snapshot is loaded (run `npm run data:fetch` with an OGD_API_KEY) and no demo entry exists for this district.',
@@ -1080,7 +1101,21 @@ app.get('/api/centres', (req: Request, res: Response) => {
     provenance: null,
     district: demo.district,
     count: demo.centers.length,
-    centres: demo.centers.map((c) => ({ ...c, dataSource: 'demo' })),
+    centres: attachDistances(
+      demo.centers.map((c) => ({
+        id: c.id,
+        name: c.name,
+        latitude: c.latitude,
+        longitude: c.longitude,
+        distanceKm: c.distanceKm,
+      })),
+      userLocation?.lat ?? null,
+      userLocation?.lon ?? null
+    ).map((d, i) => {
+      const c = demo.centers[i];
+      return { ...c, dataSource: 'demo', distanceKm: d.distanceKm };
+    }),
+    userLocation,
     notice:
       'Showing built-in demo centres. No data.gov.in snapshot is loaded — run `npm run data:fetch` with an OGD_API_KEY to replace them with real records.',
   });

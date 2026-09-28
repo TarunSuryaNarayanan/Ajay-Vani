@@ -2,33 +2,65 @@
 
 ## The short version
 
-The skill-development centres the app shows are meant to be **real records from the
-Open Government Data platform (data.gov.in)**, refreshed by hand, not a live feed.
+The skill-development centres the app shows are **real records from the Open
+Government Data platform (data.gov.in)**, refreshed by hand, not a live feed.
 
-Right now **no snapshot is committed** in this repository. Until one is fetched, the
-app falls back to a small built-in demo registry and labels every row
-`dataSource: 'demo'`, and the UI shows a red "Demo data" banner saying so. That is
-deliberate: the demo registry contains hand-written centres with plausible-looking
-coordinator names and phone numbers, and passing those off as government data to a
-judge or a beneficiary would be a false claim.
+A snapshot **is** committed: `server/data/centres/govCentres.generated.ts`
+contains 637 training-centre records from the Karnataka CMKKY (Chamarajanagar
+Kaushal Karnataka Yojana) dataset, loaded offline via
+`npm run data:fetch:local` from `data/karnataka-training-centres.csv`.
+
+Until a dataset with GPS coordinates is loaded, `GET /api/centres?lat=…&lon=…`
+returns `distanceKm: null` for these rows (the source publishes centre name,
+district and address but no latitude/longitude). The UI renders that as
+"दूरी उपलब्ध नहीं" rather than a fabricated number. The haversine path in
+`server/data/centres/distance.ts` activates automatically the moment a dataset
+with coordinates is loaded.
 
 ## Getting a real snapshot
 
-data.gov.in requires a **free API key** for every dataset — the `/resource` API and
-the file downloads both return `Authorization field missing` without one.
+data.gov.in requires a **free API key** for every dataset — the `/resource` API
+and the file downloads both return `Authorization field missing` without one.
 
 1. Register at <https://www.data.gov.in/> and copy your API key.
-2. Open the dataset page you want (e.g. an MSDE/NSDC PMKVY or ITI centre listing),
-   click the **API** tab, and copy the resource UUID out of
-   `https://www.data.gov.in/resource/<uuid>?api-key=YOUR_KEY`.
-3. Paste that UUID into `scripts/government-datasets.config.json` (the
-   `resourceUuid` field of the matching dataset). The `fieldMap` next to it lists
-   the candidate column names; adjust if the real headers differ.
-4. Fetch:
+2. Find the dataset you want. The current site is a client-rendered SPA, so the
+   resource UUID is **not** in the page HTML — it is in the URL of the dataset's
+   API tab (`https://www.data.gov.in/resource/<uuid>`) and in search-result links
+   (`https://www.data.gov.in/apis/<uuid>`). Logged-in crawlers see it; anonymous
+   fetches get boilerplate. The CKAN catalog API (`/api/3/action/*`) returns a
+   302 login wall, so it cannot be enumerated programmatically.
+3. Validate the UUID and the column names before committing a fetch:
+
+   ```bash
+   OGD_API_KEY=<your key> npm run data:discover <uuid>
+   ```
+
+   This fetches one page and prints the dataset title, last-updated date, total
+   row count, the real field names, and a sample row. Use it to confirm the UUID
+   is right and to fix the `fieldMap` candidates in
+   `scripts/government-datasets.config.json`.
+4. Paste the UUID into the matching `resourceUuid` field, adjust `fieldMap` if
+   the discover output shows different column names, then fetch:
+
+   ```bash
+   OGD_API_KEY=<your key> npm run data:fetch
+   ```
+
+### Offline / local-file mode
+
+If you have a centre listing as a CSV or JSON (downloaded manually, or from a
+state portal such as Karnataka's KSDC list), load it without the API key:
 
 ```bash
-OGD_API_KEY=<your key> npm run data:fetch
+npm run data:fetch:local
 ```
+
+Each dataset entry needs a `localFile` path (relative to the repo root) instead
+of a `resourceUuid`. The script applies the same normaliser and the same
+district/state filters, so a local file can replace a network dataset one at a
+time. The smoke test in `scripts/local-datasets.config.json` shows the shape.
+
+## What the script refuses to do
 
 The script writes:
 
