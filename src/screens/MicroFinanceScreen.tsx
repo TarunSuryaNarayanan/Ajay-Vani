@@ -178,10 +178,10 @@ export const MicroFinanceScreen: React.FC = () => {
         </button>
 
         <button
-          onClick={() => setScreen('voice-chat')}
+          onClick={() => setScreen('aadhaar-login')}
           className="btn-secondary w-full"
         >
-          नई बातचीत शुरू करें
+          आधार के माध्यम से नामांकन करें (Enroll via Aadhaar)
         </button>
       </div>
     </div>
