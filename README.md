@@ -237,6 +237,12 @@ npm run start
 | `GET` | `/api/lifecycle/:beneficiaryId` | **F2** Enrollment + message thread for a profile inbox |
 | `POST` | `/api/lifecycle/sweep` | **F2** Force a scheduler pass now (demo control) |
 | `POST` | `/api/whatsapp/inbound` | **F2** Twilio inbound webhook — replies route to the profile stream |
+| `GET` | `/api/twilio/status` | **Twilio** Live telephony gateway status (SMS & WhatsApp channels) |
+| `POST` | `/api/twilio/send-test` | **Twilio** Send real-time test SMS or WhatsApp notification |
+| `POST` | `/api/twilio/send-otp` | **Twilio** Dispatch 4-digit authentication OTP via SMS/WhatsApp |
+| `POST` | `/api/twilio/verify-otp` | **Twilio** Verify authentication OTP |
+| `POST` | `/api/twilio/send-admission-alert` | **Twilio** Dispatch training admission confirmation & QR token details |
+| `POST` | `/api/sms/inbound` | **Twilio** Inbound SMS webhook for two-way SMS interactions |
 | `POST` | `/api/course/complete` | **F3** Record training completion (`completedAt`) |
 | `GET` | `/api/post-training/jobs` | **F3** Local employers for a district + NSQF code |
 
@@ -248,7 +254,9 @@ and degrades gracefully when they are unset.
 | Variable | Required | Purpose |
 |----------|----------|---------|
 | `BHASHINI_USER_ID` / `BHASHINI_ULCA_API_KEY` / `BHASHINI_INFERENCE_KEY` | For online ASR/TTS | Bhashini ASR + TTS proxy |
-| `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_WHATSAPP_FROM` | For F2 sends | WhatsApp nudges; unset = dry mode |
+| `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` | For live telephony | Twilio telecom gateway credentials |
+| `TWILIO_PHONE_NUMBER` / `TWILIO_SMS_FROM` | For SMS sends | Twilio SMS sender number / Alphanumeric ID |
+| `TWILIO_WHATSAPP_FROM` | For WhatsApp sends | WhatsApp sender / sandbox number (e.g. `+14155238886`) |
 | `LIFECYCLE_SWEEP_INTERVAL_MS` | No | Scheduler cadence (default 60000) |
 | `GOVERNMENT_PORTAL_URL` | No | External grievance portal; unset = Ministry dashboard only |
 | `OGD_API_KEY` | For `npm run data:fetch` | Free data.gov.in key, used only by the fetch script to pull the real training-centre snapshot. The server never calls data.gov.in at runtime. See [docs/DATA_SOURCE.md](docs/DATA_SOURCE.md). |

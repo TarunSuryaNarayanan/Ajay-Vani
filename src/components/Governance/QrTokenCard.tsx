@@ -3,6 +3,7 @@ import { useApp } from '../../context/AppContext';
 import { QRCodeIcon, SpeakerIcon } from '../Icons';
 import { getGovText, formatGovText } from '../../services/governanceTranslations';
 import { speechService } from '../../services/speech';
+import { sendTwilioAdmissionAlert } from '../../services/api';
 
 const QR_VOICE_EXPLANATIONS: Record<string, string> = {
   'hi-IN': 'यह आपका डिजिटल पंजीकरण टोकन है। इस QR कोड को प्रशिक्षण केंद्र के समन्वयक को दिखाएं। वे इसे स्कैन करके आपका नाम कोर्स में दर्ज कर देंगे। इसे अपने फोन पर सुरक्षित रखें।',
@@ -18,12 +19,14 @@ const QR_VOICE_EXPLANATIONS: Record<string, string> = {
 };
 
 export const QrTokenCard: React.FC = () => {
-  const { qrToken, generateQRToken, admitToCourse, selectedLanguage } = useApp();
+  const { qrToken, generateQRToken, admitToCourse, selectedLanguage, aadhaarSession } = useApp();
   const lang = selectedLanguage || 'hi-IN';
   const t = (key: string) => getGovText(lang, key);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [isGeneratingQR, setIsGeneratingQR] = useState(false);
   const [admitStatus, setAdmitStatus] = useState<string | null>(null);
+  const [smsStatus, setSmsStatus] = useState<string | null>(null);
+  const [isSendingSms, setIsSendingSms] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
 
   const voiceExplanation = QR_VOICE_EXPLANATIONS[lang] || QR_VOICE_EXPLANATIONS['hi-IN'];
@@ -79,6 +82,30 @@ export const QrTokenCard: React.FC = () => {
     if (!qrToken) return;
     const result = await admitToCourse(qrToken.tokenId);
     setAdmitStatus(result.message || (result.success ? t('qrAdmitOk') : t('qrAdmitFail')));
+  };
+
+  const handleSendTwilioAlert = async () => {
+    if (!qrToken) return;
+    setIsSendingSms(true);
+    setSmsStatus(null);
+    try {
+      const res = await sendTwilioAdmissionAlert({
+        phoneNumber: aadhaarSession?.whatsappNumber || '9452018290',
+        beneficiaryName: qrToken.beneficiaryName,
+        roleName: qrToken.nsqfRoleNameHi,
+        centreName: (qrToken.district || 'ज़िला') + ' प्रशिक्षण केंद्र',
+        tokenId: qrToken.tokenId,
+      });
+      setSmsStatus(
+        res.sentViaTwilio
+          ? '✅ Twilio द्वारा SMS/WhatsApp भेजा गया।'
+          : 'ℹ️ Twilio सूचना दर्ज (ड्राई मोड)।'
+      );
+    } catch {
+      setSmsStatus('⚠️ भेजने में विफलता।');
+    } finally {
+      setIsSendingSms(false);
+    }
   };
 
   return (
@@ -141,6 +168,24 @@ export const QrTokenCard: React.FC = () => {
           {admitStatus && (
             <p className={`text-xs ${admitStatus.includes('सफल') || admitStatus.includes('successful') || admitStatus.includes('విజయ') || admitStatus.includes('வெற்றி') ? 'text-emerald-700' : 'text-alert'}`}>
               {admitStatus}
+            </p>
+          )}
+
+          {/* Twilio SMS / WhatsApp Admission Alert Dispatch */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handleSendTwilioAlert();
+            }}
+            disabled={isSendingSms}
+            className="w-full py-2 px-3 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 rounded-lg text-xs font-semibold flex items-center justify-center space-x-1.5 transition-colors"
+          >
+            <span>📲</span>
+            <span>{isSendingSms ? 'भेज रहे हैं...' : 'Twilio SMS / WhatsApp पर विवरण भेजें'}</span>
+          </button>
+          {smsStatus && (
+            <p className="text-[11px] text-center text-emerald-800 font-medium">
+              {smsStatus}
             </p>
           )}
         </div>

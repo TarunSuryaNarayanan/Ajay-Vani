@@ -32,13 +32,28 @@ import {
   POST_TRAINING_DAY_GATE,
   queryLocalEmployers,
 } from './services/postTraining';
-import { isWhatsAppConfigured, normaliseWhatsAppNumber, parseInboundWhatsApp } from './services/whatsapp';
+import {
+  isTwilioConfigured,
+  isSmsConfigured,
+  isWhatsAppConfigured,
+  getTwilioAccountSid,
+  getTwilioSmsFrom,
+  getTwilioWhatsAppFrom,
+  sendSmsMessage,
+  sendWhatsAppMessage,
+  sendTwilioNotification,
+  generateAndStoreOtp,
+  verifyStoredOtp,
+  parseInboundWhatsApp,
+  parseInboundSms,
+} from './services/twilioService';
+import { normaliseWhatsAppNumber } from './services/whatsappUtils';
 import { buildSpokenResponse, normaliseSpokenName } from '../src/services/spokenResponse';
 import { searchGovernmentCentres } from './data/centres/governmentCentres';
 import { attachDistances } from './data/centres/distance';
 import { LanguageCode } from '../src/types';
 
-// Load .env credentials for Bhashini
+// Load .env credentials for Bhashini & Twilio
 import 'dotenv/config';
 
 const app = express();
@@ -957,6 +972,141 @@ app.post('/api/whatsapp/inbound', (req: Request, res: Response) => {
   }
 });
 
+// ═══ Twilio Telecom Gateway Endpoints (SMS, WhatsApp, Live OTP & Alerts) ═══════
+
+app.get('/api/twilio/status', (_req: Request, res: Response) => {
+  const sid = getTwilioAccountSid();
+  const maskedSid = sid ? `${sid.slice(0, 4)}...${sid.slice(-4)}` : null;
+  res.json({
+    success: true,
+    configured: isTwilioConfigured(),
+    smsConfigured: isSmsConfigured(),
+    whatsappConfigured: isWhatsAppConfigured(),
+    accountSidMasked: maskedSid,
+    smsFrom: getTwilioSmsFrom() || null,
+    whatsappFrom: getTwilioWhatsAppFrom() || null,
+  });
+});
+
+app.post('/api/twilio/send-test', async (req: Request, res: Response) => {
+  try {
+    const { phoneNumber, message, channel } = req.body || {};
+    if (!phoneNumber) {
+      return res.status(400).json({ success: false, error: 'Phone number is required.' });
+    }
+    const bodyText = (message || '').trim() ||
+      'PM-AJAY | AJAY-VANI: नमस्ते! यह Twilio लाइव टेलीकॉम गेटवे से एक परीक्षण संदेश है। (Test notification)';
+    const result = await sendTwilioNotification(phoneNumber, bodyText, channel || 'auto');
+    return res.json({
+      success: result.success,
+      channel: result.channel,
+      messageSid: result.messageSid,
+      reason: result.reason,
+      preview: bodyText,
+      mode: isTwilioConfigured() ? 'live' : 'dry-run',
+    });
+  } catch (err: any) {
+    console.error('[Twilio] Test dispatch error:', err);
+    return res.status(500).json({ success: false, error: 'Twilio test dispatch failed.' });
+  }
+});
+
+app.post('/api/twilio/send-otp', async (req: Request, res: Response) => {
+  try {
+    const { phoneNumber, channel = 'sms', aadhaarNumber } = req.body || {};
+    if (!phoneNumber) {
+      return res.status(400).json({ success: false, error: 'Phone number is required.' });
+    }
+    const otp = generateAndStoreOtp(phoneNumber);
+    const maskedAadhaar = aadhaarNumber ? `XXXX XXXX ${String(aadhaarNumber).slice(-4)}` : 'XXXX XXXX 7777';
+    const otpMessage = `[PM-AJAY | AJAY-VANI] आपका आधार सत्यापन कोड (OTP) है: ${otp} (आधार: ${maskedAadhaar})। यह कोड 10 मिनट के लिए मान्य है।`;
+
+    const result = await sendTwilioNotification(phoneNumber, otpMessage, channel);
+
+    return res.json({
+      success: true,
+      sentViaTwilio: result.success,
+      channel: result.channel,
+      messageSid: result.messageSid,
+      reason: result.reason,
+      // In dry mode or test mode, provide demo code so automated verification remains frictionless:
+      demoOtp: (!result.success || !isTwilioConfigured()) ? otp : undefined,
+      message: result.success
+        ? `OTP ${result.channel === 'whatsapp' ? 'WhatsApp' : 'SMS'} द्वारा भेज दिया गया है।`
+        : 'ड्राई मोड: सत्यापन के लिए 1234 का उपयोग करें।',
+    });
+  } catch (err: any) {
+    console.error('[Twilio] Send OTP error:', err);
+    return res.status(500).json({ success: false, error: 'Failed to send OTP.' });
+  }
+});
+
+app.post('/api/twilio/verify-otp', (req: Request, res: Response) => {
+  try {
+    const { phoneNumber, code } = req.body || {};
+    if (!code) {
+      return res.status(400).json({ success: false, error: 'OTP code is required.' });
+    }
+    const valid = verifyStoredOtp(phoneNumber || '', String(code));
+    return res.json({
+      success: valid,
+      valid,
+      message: valid ? 'OTP सफलतापूर्वक सत्यापित हुआ।' : 'अमान्य अथवा समाप्त हो चुका OTP।',
+    });
+  } catch (err: any) {
+    console.error('[Twilio] Verify OTP error:', err);
+    return res.status(500).json({ success: false, error: 'Failed to verify OTP.' });
+  }
+});
+
+app.post('/api/twilio/send-admission-alert', async (req: Request, res: Response) => {
+  try {
+    const { phoneNumber, beneficiaryName, roleName, centreName, tokenId } = req.body || {};
+    if (!phoneNumber) {
+      return res.status(400).json({ success: false, error: 'Phone number is required.' });
+    }
+    const alertText =
+      `[PM-AJAY | AJAY-VANI] प्रिय ${beneficiaryName || 'लाभार्थी'}, आपका प्रशिक्षण में प्रवेश स्वीकृत हो गया है!\n` +
+      `टोकन संख्या: ${tokenId || 'N/A'}\n` +
+      `कोर्स: ${roleName || 'कौशल विकास'}\n` +
+      `प्रशिक्षण केंद्र: ${centreName || 'ज़िला केंद्र'}\n` +
+      `शुभकामनाएँ! - AJAY-VANI Livelihood Mission`;
+
+    const result = await sendTwilioNotification(phoneNumber, alertText, 'auto');
+    return res.json({
+      success: true,
+      sentViaTwilio: result.success,
+      channel: result.channel,
+      messageSid: result.messageSid,
+      message: result.success
+        ? `प्रवेश सूचना ${result.channel === 'whatsapp' ? 'WhatsApp' : 'SMS'} द्वारा भेज दी गई है।`
+        : 'प्रवेश सूचना पंजीकृत (ड्राई मोड)।',
+    });
+  } catch (err: any) {
+    console.error('[Twilio] Admission alert error:', err);
+    return res.status(500).json({ success: false, error: 'Failed to send admission alert.' });
+  }
+});
+
+// Twilio inbound webhook for SMS — handles SMS replies
+app.post('/api/sms/inbound', (req: Request, res: Response) => {
+  try {
+    const inbound = parseInboundSms(req.body || {});
+    if (!inbound) {
+      return res.status(400).send('Missing From/Body');
+    }
+    const enrollment = recordInboundReply(inbound.from, inbound.body);
+    if (!enrollment) {
+      console.warn(`[SMS] Inbound message from unknown number ${inbound.from}`);
+    }
+    res.type('text/xml');
+    return res.send('<Response></Response>');
+  } catch (err: any) {
+    console.error('[SMS] Inbound error:', err);
+    return res.status(500).send('Error');
+  }
+});
+
 // ═══ F3 · Post-Course AI Guidance (Second Conversation Loop) ════════════════
 
 app.post('/api/course/complete', (req: Request, res: Response) => {
@@ -1162,8 +1312,10 @@ app.listen(PORT, '0.0.0.0', () => {
   } else {
     console.log('[Bhashini] ASR + TTS proxy ready.');
   }
-  if (!isWhatsAppConfigured()) {
-    console.warn('[WhatsApp] WARNING: TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_WHATSAPP_FROM not set. Lifecycle nudges will run in dry mode.');
+  if (isTwilioConfigured()) {
+    console.log(`[Twilio] Telecom Gateway Ready · SMS: ${isSmsConfigured() ? 'Active (' + getTwilioSmsFrom() + ')' : 'Dry-mode'} · WhatsApp: ${isWhatsAppConfigured() ? 'Active (' + getTwilioWhatsAppFrom() + ')' : 'Dry-mode'}`);
+  } else {
+    console.warn('[Twilio] Credentials not configured. Twilio SMS & WhatsApp nudges are running in dry mode.');
   }
   if (!process.env.GOVERNMENT_PORTAL_URL) {
     console.log('[Grievance] Government portal forwarding disabled (GOVERNMENT_PORTAL_URL unset) — Ministry dashboard remains the destination.');

@@ -83,6 +83,42 @@ vi.mock('../services/api', () => ({
       },
     ],
   })),
+  fetchTwilioStatus: vi.fn(async () => ({
+    success: true,
+    configured: false,
+    smsConfigured: false,
+    whatsappConfigured: false,
+    accountSidMasked: null,
+    smsFrom: null,
+    whatsappFrom: null,
+  })),
+  sendTwilioTestMessage: vi.fn(async () => ({
+    success: true,
+    channel: 'sms',
+    messageSid: 'SM123',
+    reason: 'ok',
+    mode: 'dry-run',
+    preview: 'test',
+  })),
+  sendTwilioAdmissionAlert: vi.fn(async () => ({
+    success: true,
+    sentViaTwilio: false,
+    messageSid: null,
+    message: 'ok',
+  })),
+  sendTwilioOtp: vi.fn(async () => ({
+    success: true,
+    sentViaTwilio: false,
+    channel: 'sms',
+    messageSid: null,
+    demoOtp: '1234',
+    message: 'ok',
+  })),
+  verifyTwilioOtp: vi.fn(async () => ({
+    success: true,
+    valid: true,
+    message: 'ok',
+  })),
 }));
 
 const { PostTrainingGuidanceScreen } = await import('../screens/PostTrainingGuidanceScreen');

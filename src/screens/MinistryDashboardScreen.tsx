@@ -4,6 +4,7 @@ import { fetchGrievanceSummary, fetchLifecycleEnrollments, fetchLifecycleSchedul
 import { GrievanceStatus, GrievanceTicket, LifecycleEnrollment } from '../types';
 import { CheckIcon, AlertIcon, SyncIcon } from '../components/Icons';
 import { speechService } from '../services/speech';
+import { TwilioTelecomPanel } from '../components/Governance/TwilioTelecomPanel';
 
 const STATUS_LABEL: Record<GrievanceStatus, string> = {
   open: 'नया (Open)',
@@ -130,6 +131,9 @@ export const MinistryDashboardScreen: React.FC = () => {
           )}
         </p>
       </div>
+
+      {/* Twilio Telecom & Messaging Gateway */}
+      <TwilioTelecomPanel />
 
       {/* F2 · Day-45 replies routed back to the profile stream */}
       <div className="space-y-2">

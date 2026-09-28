@@ -509,3 +509,121 @@ export async function fetchLocalEmployers(params: {
   const data = await res.json();
   return { district: data.district, openings: data.openings || [], exactMatches: data.exactMatches || 0 };
 }
+
+// ═══ Twilio Telecom Gateway Client ════════════════════════════════════════════
+
+export interface TwilioGatewayStatus {
+  success: boolean;
+  configured: boolean;
+  smsConfigured: boolean;
+  whatsappConfigured: boolean;
+  accountSidMasked: string | null;
+  smsFrom: string | null;
+  whatsappFrom: string | null;
+}
+
+export async function fetchTwilioStatus(): Promise<TwilioGatewayStatus> {
+  try {
+    const res = await fetch(`${API_BASE}/twilio/status`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } catch {
+    return {
+      success: false,
+      configured: false,
+      smsConfigured: false,
+      whatsappConfigured: false,
+      accountSidMasked: null,
+      smsFrom: null,
+      whatsappFrom: null,
+    };
+  }
+}
+
+export async function sendTwilioTestMessage(params: {
+  phoneNumber: string;
+  message?: string;
+  channel?: 'sms' | 'whatsapp' | 'auto';
+}): Promise<{
+  success: boolean;
+  channel: 'sms' | 'whatsapp';
+  messageSid: string | null;
+  reason: string;
+  mode: string;
+  preview: string;
+}> {
+  const res = await fetch(`${API_BASE}/twilio/send-test`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+  return await res.json();
+}
+
+export async function sendTwilioOtp(params: {
+  phoneNumber: string;
+  channel?: 'sms' | 'whatsapp';
+  aadhaarNumber?: string;
+}): Promise<{
+  success: boolean;
+  sentViaTwilio: boolean;
+  channel: string;
+  messageSid: string | null;
+  demoOtp?: string;
+  message: string;
+}> {
+  try {
+    const res = await fetch(`${API_BASE}/twilio/send-otp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    return await res.json();
+  } catch {
+    return {
+      success: true,
+      sentViaTwilio: false,
+      channel: params.channel || 'sms',
+      messageSid: null,
+      demoOtp: '1234',
+      message: 'ऑफलाइन/ड्राई मोड: 1234 का उपयोग करें',
+    };
+  }
+}
+
+export async function verifyTwilioOtp(params: {
+  phoneNumber: string;
+  code: string;
+}): Promise<{ success: boolean; valid: boolean; message: string }> {
+  try {
+    const res = await fetch(`${API_BASE}/twilio/verify-otp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    return await res.json();
+  } catch {
+    const valid = params.code.trim() === '1234';
+    return { success: valid, valid, message: valid ? 'सत्यापित' : 'अमान्य कोड' };
+  }
+}
+
+export async function sendTwilioAdmissionAlert(params: {
+  phoneNumber: string;
+  beneficiaryName: string;
+  roleName: string;
+  centreName: string;
+  tokenId: string;
+}): Promise<{ success: boolean; sentViaTwilio: boolean; messageSid: string | null; message: string }> {
+  try {
+    const res = await fetch(`${API_BASE}/twilio/send-admission-alert`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    return await res.json();
+  } catch {
+    return { success: false, sentViaTwilio: false, messageSid: null, message: 'नेटवर्क त्रुटि' };
+  }
+}
+

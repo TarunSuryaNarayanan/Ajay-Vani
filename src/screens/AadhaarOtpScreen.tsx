@@ -9,6 +9,8 @@ export const AadhaarOtpScreen: React.FC = () => {
   const [otp, setOtp] = useState<string>('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  const [isResending, setIsResending] = useState(false);
+  const [resendStatus, setResendStatus] = useState<string | null>(null);
 
   const t = (key: string) => getAadhaarText(selectedLanguage || 'hi-IN', key);
 
@@ -43,7 +45,7 @@ export const AadhaarOtpScreen: React.FC = () => {
     setErrorMessage(null);
   };
 
-  const handleVerify = (codeToTest?: string) => {
+  const handleVerify = async (codeToTest?: string) => {
     const code = codeToTest || otp;
     const success = verifyAadhaarOtp(code);
     if (!success) {
@@ -54,6 +56,24 @@ export const AadhaarOtpScreen: React.FC = () => {
   const handleAutoFillDemoOtp = () => {
     setOtp('1234');
     handleVerify('1234');
+  };
+
+  const handleResendTwilioOtp = async () => {
+    setIsResending(true);
+    setResendStatus(null);
+    try {
+      const { sendTwilioOtp } = await import('../services/api');
+      const res = await sendTwilioOtp({
+        phoneNumber: '9452018290',
+        channel: 'sms',
+        aadhaarNumber: aadhaarNumber || '999988887777',
+      });
+      setResendStatus(res.message);
+    } catch {
+      setResendStatus('OTP भेजा गया (डेमो मोड: 1234)');
+    } finally {
+      setIsResending(false);
+    }
   };
 
   return (
@@ -81,14 +101,34 @@ export const AadhaarOtpScreen: React.FC = () => {
         </div>
 
         {/* Info Card */}
-        <div className="card-flat bg-emerald-50 border-emerald-200 p-4 space-y-1">
-          <div className="flex items-center space-x-2 text-emerald-800 font-bold text-xs">
-            <CheckIcon size={16} color="#064e3b" />
-            <span>{t('otpSentBadge')}</span>
+        <div className="card-flat bg-emerald-50 border-emerald-200 p-4 space-y-2">
+          <div className="flex items-center justify-between text-emerald-800 font-bold text-xs">
+            <div className="flex items-center space-x-2">
+              <CheckIcon size={16} color="#064e3b" />
+              <span>{t('otpSentBadge')}</span>
+            </div>
+            <span className="text-[10px] bg-emerald-200/70 text-emerald-900 px-2 py-0.5 rounded font-mono">
+              Twilio SMS: +91 94520 18290
+            </span>
           </div>
-          <p className="text-xs text-emerald-900 mt-1">
+          <p className="text-xs text-emerald-900">
             {t('otpSentBody')}
           </p>
+
+          <div className="pt-1 flex items-center justify-between text-xs">
+            <button
+              onClick={handleResendTwilioOtp}
+              disabled={isResending}
+              className="text-emerald-800 hover:text-emerald-900 underline font-semibold text-[11px]"
+            >
+              {isResending ? 'भेज रहे हैं...' : '📲 Twilio SMS दोबारा भेजें (Resend OTP)'}
+            </button>
+            {resendStatus && (
+              <span className="text-[10px] text-emerald-800 font-medium">
+                {resendStatus}
+              </span>
+            )}
+          </div>
         </div>
 
         {/* 4-Digit Display Boxes */}
