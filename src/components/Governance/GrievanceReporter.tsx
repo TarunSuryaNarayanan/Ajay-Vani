@@ -1,20 +1,40 @@
 import React, { useEffect, useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { GRIEVANCE_ISSUE_OPTIONS, GRIEVANCE_DICTATION_PROMPT } from '../../services/governance';
+import { GRIEVANCE_ISSUE_OPTIONS } from '../../services/governance';
+import { getGovText, formatGovText } from '../../services/governanceTranslations';
 import { speechService } from '../../services/speech';
 import { MicIcon, SpeakerIcon, CheckIcon } from '../Icons';
 import { GrievanceIssueType, GrievanceStatus } from '../../types';
 
-const STATUS_LABEL: Record<GrievanceStatus, string> = {
-  open: 'मंत्रालय के समक्ष लंबित',
-  'in-review': 'जाँच जारी',
-  resolved: 'निपटान हो गया',
+const STATUS_LABEL_KEY: Record<GrievanceStatus, string> = {
+  open: 'grvStatusOpen',
+  'in-review': 'grvStatusReview',
+  resolved: 'grvStatusResolved',
 };
 
 const STATUS_STYLE: Record<GrievanceStatus, string> = {
   open: 'bg-amber-50 text-amber-900 border-amber-200',
   'in-review': 'bg-blue-50 text-blue-900 border-blue-200',
   resolved: 'bg-emerald-50 text-emerald-900 border-emerald-200',
+};
+
+/** Issue option copy is keyed off the option value so each language owns its own wording. */
+const ISSUE_LABEL_KEY: Record<string, string> = {
+  'trainer-absent': 'grvIssueTrainerAbsent',
+  extortion: 'grvIssueExtortion',
+  'missing-toolkit': 'grvIssueMissingToolkit',
+  'stipend-delay': 'grvIssueStipendDelay',
+  'document-fraud': 'grvIssueDocumentFraud',
+  other: 'grvIssueOther',
+};
+
+const ISSUE_PROMPT_KEY: Record<string, string> = {
+  'trainer-absent': 'grvPromptTrainerAbsent',
+  extortion: 'grvPromptExtortion',
+  'missing-toolkit': 'grvPromptMissingToolkit',
+  'stipend-delay': 'grvPromptStipendDelay',
+  'document-fraud': 'grvPromptDocumentFraud',
+  other: 'grvPromptOther',
 };
 
 /**
@@ -31,6 +51,9 @@ export const GrievanceReporter: React.FC = () => {
   const [status, setStatus] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null);
   const [captureMode, setCaptureMode] = useState<'form' | 'voice'>('form');
 
+  const lang = selectedLanguage || 'hi-IN';
+  const t = (key: string) => getGovText(lang, key);
+
   // Spec §1.3 — the complaint lives on the beneficiary's own profile, so the
   // beneficiary needs to see how the Ministry is progressing it.
   useEffect(() => {
@@ -38,14 +61,14 @@ export const GrievanceReporter: React.FC = () => {
   }, [aadhaarSession?.aadhaarNumber]);
 
   const myTickets = (grievanceTickets ?? []).filter(
-    (t) => t.metadata.beneficiaryId === aadhaarSession?.aadhaarNumber
+    (t2) => t2.metadata.beneficiaryId === aadhaarSession?.aadhaarNumber
   );
 
-  const promptForIssue = GRIEVANCE_ISSUE_OPTIONS.find((o) => o.value === issueType)?.voicePrompt || '';
+  const promptForIssue = t(ISSUE_PROMPT_KEY[issueType] || 'grvPromptOther');
 
   const handleSubmit = async () => {
     if (!description.trim()) {
-      setStatus({ tone: 'err', text: 'कृपया शिकायत का विवरण लिखें या बोलकर दर्ज करें।' });
+      setStatus({ tone: 'err', text: t('grvEmptyDesc') });
       return;
     }
     setIsSubmitting(true);
@@ -93,9 +116,9 @@ export const GrievanceReporter: React.FC = () => {
       <div className="flex items-center justify-between">
         <div>
           <span className="font-caption text-xs text-alert uppercase font-bold block">
-            शिकायत एवं भ्रष्टाचार रिपोर्टिंग
+            {t('grvTitle')}
           </span>
-          <span className="text-[11px] text-ink-muted">शिकायत सीधे मंत्रालय डैशबोर्ड पर जाती है</span>
+          <span className="text-[11px] text-ink-muted">{t('grvSubtitle')}</span>
         </div>
         <button
           onClick={() => {
@@ -104,7 +127,7 @@ export const GrievanceReporter: React.FC = () => {
           }}
           className="text-[11px] font-bold text-trust hover:underline"
         >
-          {isOpen ? 'बंद करें' : 'शिकायत दर्ज करें'}
+          {isOpen ? t('grvClose') : t('grvOpen')}
         </button>
       </div>
 
@@ -116,11 +139,11 @@ export const GrievanceReporter: React.FC = () => {
             ? 'bg-alert text-white border-alert'
             : 'bg-surface border-alert/40 text-alert hover:bg-alert/10'
         }`}
-        aria-label="समस्या की आवाज़ से रिपोर्ट करें"
+        aria-label={t('grvMic')}
       >
         <MicIcon size={20} color={isListening ? '#FFFFFF' : '#C6482E'} />
         <span className="text-sm font-bold">
-          {isListening ? 'सुन रहा है… बोलकर रोकें' : 'समस्या बोलकर रिपोर्ट करें (Report Issue)'}
+          {isListening ? t('grvMicActive') : t('grvMic')}
         </span>
       </button>
 
@@ -128,7 +151,7 @@ export const GrievanceReporter: React.FC = () => {
         <div className="space-y-3 pt-1">
           <div>
             <label className="font-caption text-xs text-ink-muted uppercase font-semibold block mb-1">
-              समस्या का प्रकार (आवश्यक)
+              {t('grvIssueLabel')}
             </label>
             <select
               value={issueType}
@@ -140,7 +163,7 @@ export const GrievanceReporter: React.FC = () => {
             >
               {GRIEVANCE_ISSUE_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
-                  {option.label}
+                  {t(ISSUE_LABEL_KEY[option.value] || 'grvIssueOther')}
                 </option>
               ))}
             </select>
@@ -149,13 +172,13 @@ export const GrievanceReporter: React.FC = () => {
               className="mt-1.5 flex items-center space-x-1 text-[11px] font-semibold text-trust hover:underline"
             >
               <SpeakerIcon size={12} color="#009378" />
-              <span>यह प्रश्न सुनें: {promptForIssue}</span>
+              <span>{formatGovText(lang, 'grvListenQuestion', promptForIssue)}</span>
             </button>
           </div>
 
           <div>
             <label className="font-caption text-xs text-ink-muted uppercase font-semibold block mb-1">
-              शिकायत का विवरण
+              {t('grvDescLabel')}
             </label>
             <textarea
               value={description}
@@ -164,10 +187,10 @@ export const GrievanceReporter: React.FC = () => {
                 setCaptureMode('form');
               }}
               rows={4}
-              placeholder="यहाँ लिखें, या ऊपर माइक बटन दबाकर बोलें…"
+              placeholder={t('grvDescPlaceholder')}
               className="w-full p-2.5 border border-line rounded bg-surface text-sm text-ink leading-relaxed"
             />
-            <p className="text-[11px] text-ink-muted mt-1">{GRIEVANCE_DICTATION_PROMPT}</p>
+            <p className="text-[11px] text-ink-muted mt-1">{t('grvDescHint')}</p>
           </div>
 
           {status && (
@@ -184,8 +207,8 @@ export const GrievanceReporter: React.FC = () => {
 
           {!isOnline && (
             <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
-              ऑफलाइन: शिकायत सुरक्षित रखी जाएगी और कनेक्शन मिलते ही भेज दी जाएगी।
-              {pendingGrievanceCount > 0 ? ` (${pendingGrievanceCount} प्रतीक्षा में)` : ''}
+              {t('grvOffline')}
+              {pendingGrievanceCount > 0 ? formatGovText(lang, 'grvOfflinePending', pendingGrievanceCount) : ''}
             </p>
           )}
 
@@ -195,12 +218,10 @@ export const GrievanceReporter: React.FC = () => {
             className="btn-primary w-full flex items-center justify-center space-x-2"
           >
             <CheckIcon size={16} color="#FFFFFF" />
-            <span>{isSubmitting ? 'भेजा जा रहा है...' : 'शिकायत मंत्रालय डैशबोर्ड भेजें'}</span>
+            <span>{isSubmitting ? t('grvSending') : t('grvSubmit')}</span>
           </button>
 
-          <p className="text-[10px] text-ink-muted leading-relaxed">
-            आपका आधार नंबर, सक्रिय ज़िला और आवंटित प्रशिक्षण केंद्र आईडी स्वतः टिकट से जुड़ जाती है।
-          </p>
+          <p className="text-[10px] text-ink-muted leading-relaxed">{t('grvMeta')}</p>
         </div>
       )}
 
@@ -208,25 +229,31 @@ export const GrievanceReporter: React.FC = () => {
       {myTickets.length > 0 && (
         <div className="space-y-1.5 pt-1">
           <span className="font-caption text-[10px] text-ink-muted uppercase font-bold tracking-wider block">
-            आपकी दर्ज शिकायतें ({myTickets.length})
+            {formatGovText(lang, 'grvMyTickets', myTickets.length)}
           </span>
           {myTickets.map((ticket) => (
             <div key={ticket.ticketId} className="rounded border border-line bg-surface p-2.5 space-y-1">
               <div className="flex items-start justify-between gap-2">
-                <span className="text-[11px] font-bold text-ink">{ticket.issueTypeHi}</span>
+                <span className="text-[11px] font-bold text-ink">
+                  {ISSUE_LABEL_KEY[ticket.issueType]
+                    ? t(ISSUE_LABEL_KEY[ticket.issueType])
+                    : ticket.issueTypeHi}
+                </span>
                 <span
                   className={`text-[10px] font-bold px-2 py-0.5 rounded border whitespace-nowrap ${STATUS_STYLE[ticket.status]}`}
                 >
-                  {STATUS_LABEL[ticket.status]}
+                  {t(STATUS_LABEL_KEY[ticket.status])}
                 </span>
               </div>
               <p className="text-[11px] text-ink-muted leading-relaxed">{ticket.description}</p>
               <p className="text-[10px] text-ink-muted font-mono">
-                {ticket.ticketId} • {new Date(ticket.createdAt).toLocaleDateString('hi-IN')}
-                {ticket.captureMode === 'voice' ? ' • आवाज़ से दर्ज' : ''}
+                {ticket.ticketId} • {new Date(ticket.createdAt).toLocaleDateString(lang)}
+                {ticket.captureMode === 'voice' ? ` • ${t('grvVoiceFiled')}` : ''}
               </p>
               {ticket.status === 'resolved' && ticket.resolvedNote && (
-                <p className="text-[11px] text-emerald-800">कार्रवाई: {ticket.resolvedNote}</p>
+                <p className="text-[11px] text-emerald-800">
+                  {formatGovText(lang, 'grvAction', ticket.resolvedNote)}
+                </p>
               )}
             </div>
           ))}

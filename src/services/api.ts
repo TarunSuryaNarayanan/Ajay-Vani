@@ -11,6 +11,7 @@ import {
   PostTrainingJobOpening,
 } from '../types';
 import QRCode from 'qrcode';
+import { buildSpokenResponse, normaliseSpokenName } from './spokenResponse';
 
 const API_BASE = '/api';
 
@@ -30,10 +31,10 @@ export function localFallbackProcess(transcript: string, districtName = "Varanas
   }
 
   // Detect beneficiary name if spoken
-  let beneficiaryName = "साथी";
-  const nameMatch = transcript.match(/(?:naam|नाम|हमार नाम|मेरा नाम)\s+([A-Za-z\u0900-\u097F]+)/i);
+  let beneficiaryName = normaliseSpokenName(undefined, dialect);
+  const nameMatch = transcript.match(/(?:naam|नाम|हमार नाम|मेरा नाम)\s+([A-Za-zऀ-ॿ]+)/i);
   if (nameMatch && nameMatch[1]) {
-    beneficiaryName = nameMatch[1];
+    beneficiaryName = normaliseSpokenName(nameMatch[1], dialect);
   }
 
   // Match QP
@@ -72,14 +73,15 @@ export function localFallbackProcess(transcript: string, districtName = "Varanas
     income = "₹15,000 - ₹24,000 / माह";
   }
 
-  let friendlyAudio = "";
-  if (dialect.includes("bho")) {
-    friendlyAudio = `राम राम ${beneficiaryName} भाई! आपके अनुभव के आधार पर ${roleNameHi} खातिर आपके जिले ${districtName} में ${vacanciesCount} जगह उपलब्ध बा। पास के सरकारी सेंटर में 300 घंटा के मुफ़्त कोर्स और भोजन भत्ता के सुविधा बा।`;
-  } else if (dialect.includes("bun")) {
-    friendlyAudio = `राम राम ${beneficiaryName} भइया! आपके जिले ${districtName} में ${roleNameHi} के काम में ${vacanciesCount} पद खाली हैं। पास के केंद्र में मुफ्त ट्रेनिंग के संगे भोजन भत्ता भी मिलेगो।`;
-  } else {
-    friendlyAudio = `नमस्ते ${beneficiaryName} जी! आपके अनुभव के आधार पर ${roleNameHi} आपके लिए सबसे उत्तम है। आपके जिले ${districtName} में इसके लिए ${vacanciesCount} पद उपलब्ध हैं। पास के सरकारी केंद्र में 300 घंटे का निःशुल्क प्रशिक्षण उपलब्ध है।`;
-  }
+  // Spoken in the selected language, matching what the server would say online.
+  const friendlyAudio = buildSpokenResponse(dialect, {
+    beneficiaryName,
+    qpCode,
+    roleName,
+    roleNameHi,
+    district: districtName,
+    centreCount: vacanciesCount,
+  });
 
   const districtMarket: DistrictMarket = {
     district: districtName,
@@ -242,7 +244,7 @@ export async function generateQRToken(
   qpCode: string,
   roleNameHi: string,
   district: string
-): Promise<{ tokenId: string; qrSvg: string; qrDataUrl: string }> {
+): Promise<{ tokenId: string; qrSvg: string; qrDataUrl: string; beneficiaryName: string; aadhaarMasked: string; nsqfQpCode: string; nsqfRoleNameHi: string; district: string; generatedAt: number }> {
   const tokenId = `tkt_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
   const now = Date.now();
   const payload = {
@@ -256,31 +258,28 @@ export async function generateQRToken(
   };
 
   const payloadJson = JSON.stringify(payload);
-  const qrSvg = QRCode.toString(payloadJson, { type: 'svg', errorCorrectionLevel: 'M', width: 512 }).then(
-    (svg: string) => svg
-  );
 
-  // Also generate a data URL version for canvas rendering
-  const qrDataUrl = await QRCode.toDataURL(payloadJson, {
-    errorCorrectionLevel: 'M',
-    width: 512,
-    margin: 2,
-    color: { dark: '#000000', light: '#FFFFFF' },
-  });
-
-  const svgResult = await qrSvg;
+  const [qrSvg, qrDataUrl] = await Promise.all([
+    QRCode.toString(payloadJson, { type: 'svg', errorCorrectionLevel: 'M', width: 512 }),
+    QRCode.toDataURL(payloadJson, {
+      errorCorrectionLevel: 'M',
+      width: 512,
+      margin: 2,
+      color: { dark: '#000000', light: '#FFFFFF' },
+    }),
+  ]);
 
   try {
     await fetch(`${API_BASE}/qr-tokens`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-       body: JSON.stringify(payload),
+      body: JSON.stringify(payload),
     }).catch(() => {});
   } catch (e) {
     console.warn('[QR Token] Could not persist token on server:', e);
   }
 
-  return { tokenId, qrSvg: svgResult, qrDataUrl };
+  return { qrSvg, qrDataUrl, ...payload };
 }
 
 export async function verifyQRToken(

@@ -1,6 +1,9 @@
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import path from 'path';
+import os from 'os';
+import { promises as fsPromises } from 'fs';
+import { execFile } from 'child_process';
 import compression from 'compression';
 import { NSQF_PACKS, NSQFPack } from './data/nsqfPacks';
 import { DISTRICT_MARKET_REGISTRY, DistrictMarketData } from './data/districtJobs';
@@ -30,6 +33,9 @@ import {
   queryLocalEmployers,
 } from './services/postTraining';
 import { isWhatsAppConfigured, normaliseWhatsAppNumber, parseInboundWhatsApp } from './services/whatsapp';
+import { buildSpokenResponse, normaliseSpokenName } from '../src/services/spokenResponse';
+import { searchGovernmentCentres } from './data/centres/governmentCentres';
+import { LanguageCode } from '../src/types';
 
 // Load .env credentials for Bhashini
 import 'dotenv/config';
@@ -54,6 +60,7 @@ const BHASHINI_COMPUTE_ENDPOINT = 'https://dhruva-api.bhashini.gov.in/services/i
 
 // Map app LanguageCodes → Bhashini ISO-639 language codes
 function toBhashiniLang(lang: string): string {
+  if (lang.startsWith('en')) return 'en';
   if (lang.startsWith('ta')) return 'ta';
   if (lang.startsWith('te')) return 'te';
   if (lang.startsWith('mr')) return 'mr';
@@ -214,6 +221,91 @@ app.post('/api/bhashini/tts', async (req: Request, res: Response) => {
   }
 });
 
+// ─── Offline TTS (system espeak-ng) ─────────────────────────────────────────
+// Lets the app speak without any cloud key: if the host has the espeak-ng
+// binary installed, the client gets real audio for every supported language.
+// Presence is probed once and cached; absence simply leaves Bhashini/packs to
+// handle TTS, so this is strictly an additive fallback.
+
+const ESPEAK_VOICE_BY_LANGUAGE: Record<string, string> = {
+  'hi-IN': 'hi',
+  'en-IN': 'en-us',
+  'ta-IN': 'ta',
+  'te-IN': 'te',
+  'mr-IN': 'mr',
+  'bn-IN': 'bn',
+  'bho-IN': 'hi',
+  'bun-IN': 'hi',
+  'chg-IN': 'hi',
+  'mai-IN': 'hi',
+};
+
+let espeakAvailable: boolean | null = null;
+
+async function isEspeakAvailable(): Promise<boolean> {
+  if (espeakAvailable !== null) return espeakAvailable;
+  espeakAvailable = await new Promise<boolean>((resolve) => {
+    execFile('espeak-ng', ['--version'], { timeout: 4000 }, (err) => resolve(!err));
+  });
+  return espeakAvailable;
+}
+
+async function synthesizeWithEspeak(
+  text: string,
+  language: string
+): Promise<{ audioBase64: string; samplingRate: number } | null> {
+  const voice = ESPEAK_VOICE_BY_LANGUAGE[language] || 'hi';
+  const outFile = path.join(os.tmpdir(), `ajay-vani-tts-${Date.now()}-${Math.random().toString(36).slice(2)}.wav`);
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const child = execFile(
+        'espeak-ng',
+        ['-v', voice, '-s', '150', '-w', outFile, '--stdin'],
+        { timeout: 15000, maxBuffer: 1024 * 1024 },
+        (err) => (err ? reject(err) : resolve())
+      );
+      child.stdin?.end(text, 'utf8');
+    });
+
+    const wav = await fsPromises.readFile(outFile);
+    if (wav.length < 64) return null;
+    return { audioBase64: wav.toString('base64'), samplingRate: 22050 };
+  } catch (err: any) {
+    console.warn('[LocalTTS] espeak-ng synthesis failed:', err.message);
+    return null;
+  } finally {
+    fsPromises.unlink(outFile).catch(() => {});
+  }
+}
+
+app.post('/api/tts/local', async (req: Request, res: Response) => {
+  try {
+    const { text, language = 'hi-IN' } = req.body || {};
+
+    if (!text || typeof text !== 'string') {
+      return res.status(400).json({ success: false, error: 'text is required.' });
+    }
+
+    if (!(await isEspeakAvailable())) {
+      return res.status(503).json({
+        success: false,
+        error: 'espeak-ng is not installed on this host. Install it (apt install espeak-ng) or configure BHASHINI_* keys.',
+      });
+    }
+
+    const result = await synthesizeWithEspeak(text.slice(0, 600), language);
+    if (!result) {
+      return res.status(500).json({ success: false, error: 'espeak-ng produced no audio.' });
+    }
+
+    return res.json({ success: true, ...result });
+  } catch (err: any) {
+    console.error('[LocalTTS] Error:', err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ─── NLP & Heuristic Classifier for Voice Transcripts ────────────────────────
 // Implements the 7-Parameter NSQF Matching Engine per system_updates_specification.md
 
@@ -336,12 +428,12 @@ function analyzeTranscript(
 
   // ── Parameter 5: Beneficiary Name Extractor ──
   // Extracts spoken name via regex
-  let beneficiaryName = "साथी";
+  let beneficiaryName = normaliseSpokenName(undefined, dialect as LanguageCode);
   const nameMatch = transcript.match(/(?:नाम|naam|मेरा नाम|हमार नाम|मेरा|hamara|sir|सर)\s+([A-Za-z\u0900-\u097F]+(?:\s+[A-Za-z\u0900-\u097F]+)*)/i);
   if (nameMatch && nameMatch[1]) {
     const extracted = nameMatch[1].trim();
     if (!extracted.toLowerCase().match(/^(?:काम|क़म|job|work|नौकरी|कामक)/i)) {
-      beneficiaryName = extracted;
+      beneficiaryName = normaliseSpokenName(extracted, dialect as LanguageCode);
     }
   }
 
@@ -379,20 +471,17 @@ function analyzeTranscript(
     return (a.distanceKm || 999) - (b.distanceKm || 999);
   });
 
-  // ── Generate Empathetic Dialect-Attuned Spoken Response ──
-  let friendlyAudioResponse = "";
-  if (dialect.includes("bho") || dialect.includes("bhojpuri")) {
-    friendlyAudioResponse = `राम राम ${beneficiaryName} भाई! आपके बात से साफ बा कि आपमें हुनर बा। ${bestPack.roleNameHi} खातिर आपके जिले ${districtData.district} में ${districtData.openingsCount} जगह खाली बा। पास के सरकारी आईटीआई सेंटर में 300 घंटा के मुफ़्त ट्रेनिंग और भोजन भत्ता भी मिले के व्यवस्था बा।`;
-  } else if (dialect.includes("bun") || dialect.includes("bundeli")) {
-    friendlyAudioResponse = `राम राम ${beneficiaryName} भइया! आपके जिले में ${bestPack.roleNameHi} के काम की भारी मांग है। ${districtData.district} में ${districtData.openingsCount} पद खाली हैं। पास के केंद्र में मुफ्त ट्रेनिंग के संगे भोजन भत्ता भी मिलेगो।`;
-  } else if (dialect.includes("chg") || dialect.includes("chhattisgarhi")) {
-    friendlyAudioResponse = `जय जोहार ${beneficiaryName} भाई! आपके जिले ${districtData.district} में ${bestPack.roleNameHi} के काम ${districtData.openingsCount} पद खाली बा। पास के केंद्र में मुफ्त ट्रेनिंग एवं भोजन भत्ता भी मिलेगा।`;
-  } else if (dialect.includes("mai") || dialect.includes("maithili")) {
-    friendlyAudioResponse = `प्रणाम ${beneficiaryName} जी! आपके अनुभव कें सभ कें से ${bestPack.roleNameHi} उपयुक्त अछी। आपके जिले ${districtData.district} में एकर ${districtData.openingsCount} पद उपलब्ध अछि।`;
-  } else {
-    // Standard Hindi / Neutral Regional / Tamil / Telugu / Marathi / Bengali
-    friendlyAudioResponse = `नमस्ते ${beneficiaryName} जी! आपके अनुभव के आधार पर ${bestPack.roleNameHi} आपके लिए सबसे उपयुक्त है। आपके जिले ${districtData.district} में इसके लिए ${districtData.openingsCount} पद उपलब्ध हैं। पास के केंद्र में 300 घंटे का निःशुल्क प्रशिक्षण उपलब्ध है।`;
-  }
+  // ── Generate Empathetic Spoken Response in the beneficiary's own language ──
+  // The text must match the selected language's script: the speech engine
+  // synthesises from the script, so Hindi text read by a Tamil voice is noise.
+  const friendlyAudioResponse = buildSpokenResponse(dialect as LanguageCode, {
+    beneficiaryName,
+    qpCode: bestPack.qpCode,
+    roleName: bestPack.roleName,
+    roleNameHi: bestPack.roleNameHi,
+    district: districtData.district,
+    centreCount: districtData.openingsCount,
+  });
 
   return {
     profile: {
@@ -930,12 +1019,80 @@ app.get('/api/config', (_req: Request, res: Response) => {
   });
 });
 
-app.get('/api/health', (_req: Request, res: Response) => {
+// ─── Training centres: real government snapshot, demo registry as labelled fallback ──
+// Every response states its own `source` so the UI can tell the beneficiary
+// whether a row came from data.gov.in or from the demo registry. Demo rows are
+// never presented as government data.
+
+app.get('/api/centres', (req: Request, res: Response) => {
+  const district = String(req.query.district || '').trim();
+  const scheme = String(req.query.scheme || '').trim();
+  const limit = Math.min(Number(req.query.limit) || 100, 500);
+
+  if (!district) {
+    return res.status(400).json({ success: false, error: 'district is required.' });
+  }
+
+  const gov = searchGovernmentCentres(district, { scheme, limit });
+
+  if (gov.found) {
+    return res.json({
+      success: true,
+      source: 'data.gov.in',
+      provenance: gov.provenance,
+      district,
+      count: gov.centres.length,
+      centres: gov.centres,
+    });
+  }
+
+  // No real row for this district. Fall back to the demo registry, but say so.
+  const key = Object.keys(DISTRICT_MARKET_REGISTRY).find((k) => {
+    const d = DISTRICT_MARKET_REGISTRY[k];
+    return (
+      k.toLowerCase() === district.toLowerCase() ||
+      d.district.toLowerCase() === district.toLowerCase() ||
+      d.district.toLowerCase().includes(district.toLowerCase()) ||
+      district.toLowerCase().includes(d.district.toLowerCase())
+    );
+  });
+
+  if (!key) {
+    return res.json({
+      success: true,
+      // 'none' rather than 'data.gov.in': nothing was loaded and nothing matched.
+      // Reporting a source here would imply the empty result came from the portal.
+      source: gov.provenance ? 'data.gov.in' : 'none',
+      provenance: gov.provenance,
+      district,
+      count: 0,
+      centres: [],
+      notice: gov.provenance
+        ? 'No centre found for this district in the loaded data.gov.in snapshot, and no demo entry exists either.'
+        : 'No data.gov.in snapshot is loaded (run `npm run data:fetch` with an OGD_API_KEY) and no demo entry exists for this district.',
+    });
+  }
+
+  const demo = DISTRICT_MARKET_REGISTRY[key];
+  return res.json({
+    success: true,
+    source: 'demo',
+    provenance: null,
+    district: demo.district,
+    count: demo.centers.length,
+    centres: demo.centers.map((c) => ({ ...c, dataSource: 'demo' })),
+    notice:
+      'Showing built-in demo centres. No data.gov.in snapshot is loaded — run `npm run data:fetch` with an OGD_API_KEY to replace them with real records.',
+  });
+});
+
+app.get('/api/health', async (_req: Request, res: Response) => {
   res.json({
     status: "ok",
     service: "AJAY-VANI Voice Livelihood Engine",
     version: "2.0.0",
     bhashiniConfigured: !!(BHASHINI_USER_ID && BHASHINI_ULCA_API_KEY && BHASHINI_INFERENCE_KEY),
+    localTtsAvailable: await isEspeakAvailable(),
     whatsappConfigured: isWhatsAppConfigured(),
     grievanceTickets: listGrievanceTickets().length,
     time: new Date().toISOString()

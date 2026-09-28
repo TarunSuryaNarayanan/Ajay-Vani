@@ -89,6 +89,7 @@ const { PostTrainingGuidanceScreen } = await import('../screens/PostTrainingGuid
 const { MinistryDashboardScreen } = await import('../screens/MinistryDashboardScreen');
 const { GrievanceReporter } = await import('../components/Governance/GrievanceReporter');
 const { LifecycleNudgePanel } = await import('../components/Governance/LifecycleNudgePanel');
+const { getGovText } = await import('../services/governanceTranslations');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -209,26 +210,34 @@ describe('MinistryDashboardScreen', () => {
 describe('GrievanceReporter', () => {
   it('renders the report form collapsed behind the microphone button', async () => {
     await render(<GrievanceReporter />);
-    expect(container.textContent).toContain('Report Issue');
-    expect(container.textContent).not.toContain('मंत्रालय डैशबोर्ड भेजें');
+    expect(container.textContent).toContain(getGovText('hi-IN', 'grvMic'));
+    expect(container.textContent).not.toContain(getGovText('hi-IN', 'grvSubmit'));
+  });
+
+  it('renders the same panel in the selected language', async () => {
+    mockState.selectedLanguage = 'ta-IN';
+    await render(<GrievanceReporter />);
+    expect(container.textContent).toContain(getGovText('ta-IN', 'grvTitle'));
+    expect(container.textContent).toContain(getGovText('ta-IN', 'grvMic'));
+    mockState.selectedLanguage = 'hi-IN';
   });
 
   it('blocks submission without a description', async () => {
     await render(<GrievanceReporter />);
     const toggle = Array.from(container.querySelectorAll('button')).find((b) =>
-      b.textContent?.includes('शिकायत दर्ज करें')
+      b.textContent?.includes(getGovText('hi-IN', 'grvOpen'))
     );
     await act(async () => {
       toggle?.click();
     });
     const submit = Array.from(container.querySelectorAll('button')).find((b) =>
-      b.textContent?.includes('शिकायत मंत्रालय डैशबोर्ड भेजें')
+      b.textContent?.includes(getGovText('hi-IN', 'grvSubmit'))
     );
     await act(async () => {
       submit?.click();
     });
     expect(mockState.reportGrievance).not.toHaveBeenCalled();
-    expect(container.textContent).toContain('कृपया शिकायत का विवरण लिखें');
+    expect(container.textContent).toContain(getGovText('hi-IN', 'grvEmptyDesc'));
   });
 
   it("lists only this beneficiary's own tickets with Ministry status", async () => {

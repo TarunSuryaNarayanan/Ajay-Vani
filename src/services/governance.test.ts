@@ -6,6 +6,7 @@ import {
   isPostTrainingEligible,
   isValidWhatsAppNumber,
   landingScreenFor,
+  resolveSpokenPath,
   simulateDay90Window,
   GRIEVANCE_ISSUE_OPTIONS,
   POST_TRAINING_DAY_GATE,
@@ -163,5 +164,33 @@ describe('grievance categories and phone validation', () => {
     expect(isValidWhatsAppNumber('+91 94520 18290')).toBe(true);
     expect(isValidWhatsAppNumber('12345')).toBe(false);
     expect(isValidWhatsAppNumber('')).toBe(false);
+  });
+});
+
+describe('resolveSpokenPath (post-training voice answers)', () => {
+  it('routes a business answer to the business path', () => {
+    expect(resolveSpokenPath('haan apna dukan shuru karna hai')).toBe('business');
+    expect(resolveSpokenPath('என் கடையை தொடங்க வேண்டும்')).toBe('business');
+  });
+
+  it('routes a job answer to the job path', () => {
+    expect(resolveSpokenPath('mujhe naukri chahiye kisi company me')).toBe('job');
+    expect(resolveSpokenPath('আমার একটা চাকরি দরকার')).toBe('job');
+  });
+
+  it('routes a loan answer to the MUDRA path', () => {
+    expect(resolveSpokenPath('mujhe mudra loan chahiye taar dene ke liye')).toBe('mudra');
+    expect(resolveSpokenPath('எனக்கு ஒரு கடனு வேணும்')).toBe('mudra');
+  });
+
+  it('treats a bare yes as the first path the screen offers', () => {
+    expect(resolveSpokenPath('haan')).toBe('business');
+    expect(resolveSpokenPath('ஆம்')).toBe('business');
+  });
+
+  it('returns null for a refusal or an unintelligible answer', () => {
+    expect(resolveSpokenPath('naukri nahi chahiye')).toBeNull();
+    expect(resolveSpokenPath('')).toBeNull();
+    expect(resolveSpokenPath('kya kya hua')).toBeNull();
   });
 });

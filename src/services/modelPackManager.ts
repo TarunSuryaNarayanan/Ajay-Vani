@@ -1,4 +1,10 @@
 import { LanguageCode } from '../types';
+import {
+  ASR_MODEL_DIR,
+  ASR_MODEL_FILES,
+  ASR_MODEL_REPO,
+  ASR_MODEL_TOTAL_BYTES,
+} from '../generated/asrModelManifest';
 
 export type QualityTier = 'tiny' | 'base';
 
@@ -15,12 +21,29 @@ export interface PackArtifact {
   readonly sha256: string;
 }
 
+/**
+ * ASR is one shared multilingual Whisper model, not one model per language.
+ * A language picks the shared directory plus the Whisper language code that
+ * its speech is decoded with.
+ */
+export interface AsrModelPack {
+  /** Directory under the model base URL, also the transformers.js model id. */
+  readonly modelId: string;
+  /** Hugging Face repo the files were fetched from (provenance only). */
+  readonly source: string;
+  /** dtype passed to transformers.js; q8 selects the `_quantized` files. */
+  readonly dtype: 'q8';
+  /** Every file transformers.js requests, with its real size and sha256. */
+  readonly files: readonly PackArtifact[];
+  readonly totalBytes: number;
+}
+
 export interface LanguagePack {
   readonly languageCode: LanguageCode;
   readonly effectiveLanguage: string;
   readonly displayName: string;
   readonly displayNameNative: string;
-  readonly asr: { tiny: PackArtifact; base: PackArtifact };
+  readonly asr: AsrModelPack;
   readonly tts: PackArtifact | null;
   readonly note?: string;
 }
@@ -58,28 +81,62 @@ export function getModelBaseUrlSync(): string {
   return runtimeModelBaseUrl || MODEL_BASE_URL;
 }
 
+/** A manifest is usable only when every hash is a real, full-length sha256. */
+export function isPackConfigured(pack: LanguagePack | undefined): boolean {
+  if (!pack) return false;
+  return (
+    pack.asr.files.length > 0 &&
+    pack.asr.files.every(
+      (f) => /^[0-9a-f]{64}$/.test(f.sha256) && f.size > 0 && typeof f.path === 'string' && f.path.length > 0
+    )
+  );
+}
+
+const ASR_FILES: readonly PackArtifact[] = ASR_MODEL_FILES.map((f) => ({
+  path: f.path,
+  size: f.size,
+  sha256: f.sha256,
+}));
+
+/**
+ * Every language shares the same on-disk model. Only `effectiveLanguage`
+ * differs, which is what makes hi/ta/te/mr/bn/en work out of one download
+ * (and bho/bun/chg/mai work as Devanagari via the 'hi' code).
+ */
+const SHARED_ASR: AsrModelPack = {
+  modelId: ASR_MODEL_DIR,
+  source: ASR_MODEL_REPO,
+  dtype: 'q8',
+  files: ASR_FILES,
+  totalBytes: ASR_MODEL_TOTAL_BYTES,
+};
+
+const DEVANAGARI_ALIAS_NOTE =
+  'Aliased to Hindi pack — no dedicated offline model exists; Devanagari speech is transcribed with the multilingual Whisper "hi" code.';
+
 export const LANGUAGE_PACKS: Record<LanguageCode, LanguagePack> = {
   'hi-IN': {
     languageCode: 'hi-IN',
     effectiveLanguage: 'hi',
     displayName: 'Hindi',
     displayNameNative: 'हिंदी',
-    asr: {
-      tiny: {
-        path: 'whisper-tiny-hi/q8_0/a1b2c3d4.onnx',
-        size: 42 * 1024 * 1024,
-        sha256: 'a1b2c3d4placeholder_sha256_tiny_hi_placeholder000000000000000',
-      },
-      base: {
-        path: 'whisper-base-hi/q8_0/e5f6g7h8.onnx',
-        size: 78 * 1024 * 1024,
-        sha256: 'e5f6g7h8placeholder_sha256_base_hi_placeholder0000000000000',
-      },
-    },
+    asr: SHARED_ASR,
     tts: {
       path: 'piper/hi_IN-pratham-medium.onnx',
       size: 64 * 1024 * 1024,
       sha256: 'piper_hi_placeholder_sha256_placeholder0000000000000',
+    },
+  },
+  'en-IN': {
+    languageCode: 'en-IN',
+    effectiveLanguage: 'en',
+    displayName: 'English',
+    displayNameNative: 'English',
+    asr: SHARED_ASR,
+    tts: {
+      path: 'piper/en_IN-amy-medium.onnx',
+      size: 64 * 1024 * 1024,
+      sha256: 'piper_en_placeholder_sha256_placeholder0000000000000',
     },
   },
   'bho-IN': {
@@ -87,98 +144,43 @@ export const LANGUAGE_PACKS: Record<LanguageCode, LanguagePack> = {
     effectiveLanguage: 'hi',
     displayName: 'Bhojpuri',
     displayNameNative: 'भोजपुरी',
-    asr: {
-      tiny: {
-        path: 'whisper-tiny-hi/q8_0/a1b2c3d4.onnx',
-        size: 42 * 1024 * 1024,
-        sha256: 'a1b2c3d4placeholder_sha256_tiny_hi_placeholder000000000000000',
-      },
-      base: {
-        path: 'whisper-base-hi/q8_0/e5f6g7h8.onnx',
-        size: 78 * 1024 * 1024,
-        sha256: 'e5f6g7h8placeholder_sha256_base_hi_placeholder0000000000000',
-      },
-    },
+    asr: SHARED_ASR,
     tts: null,
-    note: 'Aliased to Hindi pack — no dedicated offline model exists for Bhojpuri.',
+    note: DEVANAGARI_ALIAS_NOTE,
   },
   'bun-IN': {
     languageCode: 'bun-IN',
     effectiveLanguage: 'hi',
     displayName: 'Bundeli',
     displayNameNative: 'बुंदेली',
-    asr: {
-      tiny: {
-        path: 'whisper-tiny-hi/q8_0/a1b2c3d4.onnx',
-        size: 42 * 1024 * 1024,
-        sha256: 'a1b2c3d4placeholder_sha256_tiny_hi_placeholder000000000000000',
-      },
-      base: {
-        path: 'whisper-base-hi/q8_0/e5f6g7h8.onnx',
-        size: 78 * 1024 * 1024,
-        sha256: 'e5f6g7h8placeholder_sha256_base_hi_placeholder0000000000000',
-      },
-    },
+    asr: SHARED_ASR,
     tts: null,
-    note: 'Aliased to Hindi pack — no dedicated offline model exists for Bundeli.',
+    note: DEVANAGARI_ALIAS_NOTE,
   },
   'chg-IN': {
     languageCode: 'chg-IN',
     effectiveLanguage: 'hi',
     displayName: 'Chhattisgarhi',
     displayNameNative: 'छत्तीसगढ़ी',
-    asr: {
-      tiny: {
-        path: 'whisper-tiny-hi/q8_0/a1b2c3d4.onnx',
-        size: 42 * 1024 * 1024,
-        sha256: 'a1b2c3d4placeholder_sha256_tiny_hi_placeholder000000000000000',
-      },
-      base: {
-        path: 'whisper-base-hi/q8_0/e5f6g7h8.onnx',
-        size: 78 * 1024 * 1024,
-        sha256: 'e5f6g7h8placeholder_sha256_base_hi_placeholder0000000000000',
-      },
-    },
+    asr: SHARED_ASR,
     tts: null,
-    note: 'Aliased to Hindi pack — no dedicated offline model exists for Chhattisgarhi.',
+    note: DEVANAGARI_ALIAS_NOTE,
   },
   'mai-IN': {
     languageCode: 'mai-IN',
     effectiveLanguage: 'hi',
     displayName: 'Maithili',
     displayNameNative: 'मैथिली',
-    asr: {
-      tiny: {
-        path: 'whisper-tiny-hi/q8_0/a1b2c3d4.onnx',
-        size: 42 * 1024 * 1024,
-        sha256: 'a1b2c3d4placeholder_sha256_tiny_hi_placeholder000000000000000',
-      },
-      base: {
-        path: 'whisper-base-hi/q8_0/e5f6g7h8.onnx',
-        size: 78 * 1024 * 1024,
-        sha256: 'e5f6g7h8placeholder_sha256_base_hi_placeholder0000000000000',
-      },
-    },
+    asr: SHARED_ASR,
     tts: null,
-    note: 'Aliased to Hindi pack — no dedicated offline model exists for Maithili.',
+    note: DEVANAGARI_ALIAS_NOTE,
   },
   'ta-IN': {
     languageCode: 'ta-IN',
     effectiveLanguage: 'ta',
     displayName: 'Tamil',
     displayNameNative: 'தமிழ்',
-    asr: {
-      tiny: {
-        path: 'whisper-tiny-ta/q8_0/b3c4d5e6.onnx',
-        size: 42 * 1024 * 1024,
-        sha256: 'b3c4d5e6placeholder_sha256_tiny_ta_placeholder000000000000000',
-      },
-      base: {
-        path: 'whisper-base-ta/q8_0/f7g8h9i0.onnx',
-        size: 78 * 1024 * 1024,
-        sha256: 'f7g8h9i0placeholder_sha256_base_ta_placeholder0000000000000',
-      },
-    },
+    asr: SHARED_ASR,
     tts: null,
     note: 'Offline TTS not yet available for Tamil. Uses Bhashini Enhanced mode.',
   },
@@ -187,18 +189,7 @@ export const LANGUAGE_PACKS: Record<LanguageCode, LanguagePack> = {
     effectiveLanguage: 'te',
     displayName: 'Telugu',
     displayNameNative: 'తెలుగు',
-    asr: {
-      tiny: {
-        path: 'whisper-tiny-te/q8_0/c5d6e7f8.onnx',
-        size: 42 * 1024 * 1024,
-        sha256: 'c5d6e7f8placeholder_sha256_tiny_te_placeholder000000000000000',
-      },
-      base: {
-        path: 'whisper-base-te/q8_0/g9h0i1j2.onnx',
-        size: 78 * 1024 * 1024,
-        sha256: 'g9h0i1j2placeholder_sha256_base_te_placeholder0000000000000',
-      },
-    },
+    asr: SHARED_ASR,
     tts: null,
     note: 'Offline TTS not yet available for Telugu. Uses Bhashini Enhanced mode.',
   },
@@ -207,18 +198,7 @@ export const LANGUAGE_PACKS: Record<LanguageCode, LanguagePack> = {
     effectiveLanguage: 'mr',
     displayName: 'Marathi',
     displayNameNative: 'मराठी',
-    asr: {
-      tiny: {
-        path: 'whisper-tiny-mr/q8_0/d7e8f9a0.onnx',
-        size: 42 * 1024 * 1024,
-        sha256: 'd7e8f9a0placeholder_sha256_tiny_mr_placeholder000000000000000',
-      },
-      base: {
-        path: 'whisper-base-mr/q8_0/h1i2j3k4.onnx',
-        size: 78 * 1024 * 1024,
-        sha256: 'h1i2j3k4placeholder_sha256_base_mr_placeholder0000000000000',
-      },
-    },
+    asr: SHARED_ASR,
     tts: null,
     note: 'Offline TTS not yet available for Marathi. Uses Bhashini Enhanced mode.',
   },
@@ -227,24 +207,13 @@ export const LANGUAGE_PACKS: Record<LanguageCode, LanguagePack> = {
     effectiveLanguage: 'bn',
     displayName: 'Bengali',
     displayNameNative: 'বাংলা',
-    asr: {
-      tiny: {
-        path: 'whisper-tiny-bn/q8_0/e9f0a1b2.onnx',
-        size: 42 * 1024 * 1024,
-        sha256: 'e9f0a1b2placeholder_sha256_tiny_bn_placeholder000000000000000',
-      },
-      base: {
-        path: 'whisper-base-bn/q8_0/i3j4k5l6.onnx',
-        size: 78 * 1024 * 1024,
-        sha256: 'i3j4k5l6placeholder_sha256_base_bn_placeholder0000000000000',
-      },
-    },
+    asr: SHARED_ASR,
     tts: null,
     note: 'Offline TTS not yet available for Bengali. Uses Bhashini Enhanced mode.',
   },
 };
 
-export const EFFECTIVE_LANGUAGES = ['hi', 'ta', 'te', 'mr', 'bn'] as const;
+export const EFFECTIVE_LANGUAGES = ['hi', 'en', 'ta', 'te', 'mr', 'bn'] as const;
 
 export type EffectiveLanguage = (typeof EFFECTIVE_LANGUAGES)[number];
 
@@ -259,10 +228,22 @@ export function getEffectiveLanguage(lang: LanguageCode): EffectiveLanguage {
   return pack.effectiveLanguage as EffectiveLanguage;
 }
 
+/** URL of one file of a pack, e.g. `/models/whisper-tiny/config.json`. */
 export function getArtifactUrl(artifact: PackArtifact): string {
   const base = getModelBaseUrlSync();
   const trimmed = base.endsWith('/') ? base.slice(0, -1) : base;
   return `${trimmed}/${artifact.path}`;
+}
+
+/**
+ * Directory transformers.js is pointed at, e.g. `/models/whisper-tiny`.
+ * transformers.js appends `config.json`, `onnx/encoder_model_quantized.onnx`
+ * and friends itself, so this is what the pipeline call needs.
+ */
+export function getAsrModelUrl(pack: LanguagePack): string {
+  const base = getModelBaseUrlSync();
+  const trimmed = base.endsWith('/') ? base.slice(0, -1) : base;
+  return `${trimmed}/${pack.asr.modelId}`;
 }
 
 export type PackObserver = (record: PackRecord, lang: LanguageCode) => void;
@@ -311,13 +292,13 @@ export class PackStateManager {
 
   getRecord(lang: LanguageCode): PackRecord {
     const pack = getPackForLanguage(lang);
-    if (!pack || pack.asr.tiny.sha256.includes('placeholder')) {
+    if (!isPackConfigured(pack)) {
       return { state: 'unavailable', downloadedBytes: 0, totalBytes: 0 };
     }
     const rec = this.records.get(lang) ?? {
       state: 'not_downloaded',
       downloadedBytes: 0,
-      totalBytes: 0,
+      totalBytes: pack.asr.totalBytes,
     };
     return rec;
   }
@@ -352,8 +333,8 @@ export class PackStateManager {
   }
 
   setStateReady(lang: LanguageCode) {
-    this.setState(lang, 'ready', { downloadedBytes: 0, totalBytes: 0 });
-    this.promoteToLru(lang);
+    const pack = getPackForLanguage(lang);
+    this.setState(lang, 'ready', { downloadedBytes: 0, totalBytes: pack?.asr.totalBytes ?? 0 });
   }
 
   setStateFailed(lang: LanguageCode, error: string) {
@@ -376,7 +357,7 @@ export class PackStateManager {
     const pack = getPackForLanguage(lang);
     if (!pack) return { ok: false, reason: 'No pack defined for this language' };
 
-    if (pack.asr.tiny.sha256.includes('placeholder')) {
+    if (!isPackConfigured(pack)) {
       return { ok: false, reason: 'Pack not yet configured with real artifacts' };
     }
 
@@ -385,7 +366,7 @@ export class PackStateManager {
     if (rec.state === 'downloading') return { ok: false, reason: 'Download already in progress' };
 
     if (typeof navigator !== 'undefined' && navigator.storage?.estimate) {
-      const needed = pack.asr.tiny.size;
+      const needed = pack.asr.totalBytes;
       navigator.storage.estimate().then((estimate) => {
         const available = (estimate.quota || 0) - (estimate.usage || 0);
         if (available < needed * 1.5) {
@@ -397,13 +378,15 @@ export class PackStateManager {
     return { ok: true };
   }
 
-  async getDownloadUrl(lang: LanguageCode, tier: QualityTier = 'tiny'): Promise<string | null> {
-    const can = this.canDownload(lang);
-    if (!can.ok) return null;
-
+  /**
+   * URLs of every file the shared ASR model needs. The model ships inside
+   * `public/models`, so "downloading" a pack is really verifying that the
+   * origin already serves those files.
+   */
+  async getArtifactUrls(lang: LanguageCode): Promise<string[]> {
     const pack = getPackForLanguage(lang);
-    const artifact = tier === 'base' ? pack.asr.base : pack.asr.tiny;
-    return getArtifactUrl(artifact);
+    if (!pack) return [];
+    return pack.asr.files.map(getArtifactUrl);
   }
 }
 

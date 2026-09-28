@@ -251,6 +251,7 @@ and degrades gracefully when they are unset.
 | `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_WHATSAPP_FROM` | For F2 sends | WhatsApp nudges; unset = dry mode |
 | `LIFECYCLE_SWEEP_INTERVAL_MS` | No | Scheduler cadence (default 60000) |
 | `GOVERNMENT_PORTAL_URL` | No | External grievance portal; unset = Ministry dashboard only |
+| `OGD_API_KEY` | For `npm run data:fetch` | Free data.gov.in key, used only by the fetch script to pull the real training-centre snapshot. The server never calls data.gov.in at runtime. See [docs/DATA_SOURCE.md](docs/DATA_SOURCE.md). |
 
 
 ### Request/Response Example

@@ -76,10 +76,26 @@ describe('queryLocalEmployers (Path B)', () => {
     for (const opening of result.openings) {
       expect(opening.contactPhone).toMatch(/^\+91/);
       expect(opening.address.length).toBeGreaterThan(0);
-      expect(opening.vacancies).toBeGreaterThan(0);
-      expect(opening.monthlyStipend).toContain('₹');
+      expect(opening.distanceKm).toBeGreaterThanOrEqual(0);
     }
-    // Level 4 beneficiaries are shown a higher wage band than level 3.
-    expect(result.openings[0].monthlyStipend).toBe('₹22,000 - ₹32,000 / माह');
+  });
+
+  it('never invents vacancy counts or wage bands', () => {
+    // A training-centre dataset publishes no vacancies and no wages, so the API
+    // must not manufacture them from course duration or NSQF level.
+    for (const level of [1, 2, 3, 4]) {
+      const result = queryLocalEmployers({ district: 'Varanasi', qpCode: 'ELE/Q5901', nsqfLevel: level });
+      for (const opening of result.openings) {
+        expect(opening.vacancies).toBeNull();
+        expect(opening.monthlyStipend).toBeNull();
+      }
+    }
+  });
+
+  it('flags the missing live vacancy data and tags the data source', () => {
+    const result = queryLocalEmployers({ district: 'Varanasi', qpCode: 'ELE/Q5901' });
+    expect(result.liveVacancyData).toBe(false);
+    expect(result.notice).toMatch(/not live job vacancies/i);
+    expect(result.openings.every((o) => o.dataSource === 'demo')).toBe(true);
   });
 });

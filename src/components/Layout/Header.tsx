@@ -1,22 +1,27 @@
 import React from 'react';
 import { useApp } from '../../context/AppContext';
-import { ArrowBackIcon, SyncIcon } from '../Icons';
+import { ArrowBackIcon, SyncIcon, BriefcaseIcon } from '../Icons';
+import { getDashboardText } from '../../services/translations';
 
 export const Header: React.FC = () => {
-  const { 
-    currentScreen, 
-    setScreen, 
-    selectedDialectName, 
+  const {
+    currentScreen,
+    setScreen,
+    selectedDialectName,
     unsyncedCount,
     pendingGrievanceCount,
-    isOnline, 
-    isAadhaarLoggedIn 
+    isOnline,
+    isAadhaarLoggedIn,
+    selectedLanguage,
+    openServicesPanel
   } = useApp();
+
+  const t = (key: string) => getDashboardText(selectedLanguage || 'hi-IN', key);
 
   const handleBack = () => {
     switch (currentScreen) {
       case 'voice-chat':
-        setScreen('language-select');
+        setScreen(isAadhaarLoggedIn ? 'aadhaar-login' : 'language-select');
         break;
       case 'nsqf-profile':
         setScreen('voice-chat');
@@ -76,6 +81,16 @@ export const Header: React.FC = () => {
       </div>
 
       <div className="flex items-center space-x-1.5">
+        {/* Complaints · Training lifecycle · QR token (side panel) */}
+        <button
+          onClick={() => openServicesPanel()}
+          className="px-2 py-1 rounded bg-black/20 text-surface hover:bg-black/30 text-xs font-bold flex items-center space-x-1"
+          aria-label={t('panelTitle')}
+        >
+          <BriefcaseIcon size={13} color="#F6F6F6" />
+          <span className="hidden sm:inline">{t('panelButton')}</span>
+        </button>
+
         {/* Ministry Monitoring Dashboard access (F1 grievance destination) */}
         <button
           onClick={() => setScreen('ministry-dashboard')}

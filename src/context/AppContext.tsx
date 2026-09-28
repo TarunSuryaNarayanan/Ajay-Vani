@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { ServicesPanelTab } from '../components/Dashboard/DashboardSidePanel';
 import {
   LanguageCode,
   VoiceProcessResult,
@@ -77,12 +78,20 @@ interface AppContextType {
   simulatePostTrainingWindow: () => Promise<void>;
   resetGovernanceState: () => void;
   isPostTrainingUnlocked: boolean;
+  // ─── Services side panel (complaints · training lifecycle · QR) ─────────────
+  servicesPanelOpen: boolean;
+  servicesPanelTab: ServicesPanelTab;
+  openServicesPanel: (tab?: ServicesPanelTab) => void;
+  closeServicesPanel: () => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  // Entry flow per aadhaar_login_architecture.md: language → Aadhaar login → OTP → voice chat
   const [currentScreen, setCurrentScreen] = useState<ScreenType>('language-select');
+  const [servicesPanelOpen, setServicesPanelOpen] = useState(false);
+  const [servicesPanelTab, setServicesPanelTab] = useState<ServicesPanelTab>('complaints');
   const [selectedLanguage, setSelectedLanguage] = useState<LanguageCode>('hi-IN');
   const [selectedDialectName, setSelectedDialectName] = useState<string>('हिंदी');
   const [selectedDistrict, setSelectedDistrict] = useState<string>('Varanasi');
@@ -116,32 +125,28 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const generateQRToken = async () => {
     if (!currentResult || !aadhaarSession) return;
 
-    const tokenId = `tkt_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    const { generateQRToken: genQR } = await import('../services/api');
+    const apiToken = await genQR(
+      aadhaarSession.beneficiaryName || currentResult.profile.beneficiaryName,
+      aadhaarSession.maskedAadhaar || 'XXXX XXXX 7777',
+      currentResult.recommendedNSQF.qpCode,
+      currentResult.recommendedNSQF.roleNameHi,
+      aadhaarSession.district || selectedDistrict
+    );
+
     const token: QRToken = {
-      tokenId,
-      beneficiaryName: aadhaarSession.beneficiaryName || currentResult.profile.beneficiaryName,
-      aadhaarMasked: aadhaarSession.maskedAadhaar || 'XXXX XXXX 7777',
-      nsqfQpCode: currentResult.recommendedNSQF.qpCode,
-      nsqfRoleNameHi: currentResult.recommendedNSQF.roleNameHi,
-      district: aadhaarSession.district || selectedDistrict,
-      generatedAt: Date.now(),
+      tokenId: apiToken.tokenId,
+      beneficiaryName: apiToken.beneficiaryName,
+      aadhaarMasked: apiToken.aadhaarMasked,
+      nsqfQpCode: apiToken.nsqfQpCode,
+      nsqfRoleNameHi: apiToken.nsqfRoleNameHi,
+      district: apiToken.district,
+      generatedAt: apiToken.generatedAt,
       isUsed: false,
+      qrDataUrl: apiToken.qrDataUrl,
     };
 
     setQrToken(token);
-
-    try {
-      const { generateQRToken: genQR } = await import('../services/api');
-      await genQR(
-        token.beneficiaryName,
-        token.aadhaarMasked,
-        token.nsqfQpCode,
-        token.nsqfRoleNameHi,
-        token.district
-      );
-    } catch (e) {
-      console.warn('[QR Token] Could not persist to server:', e);
-    }
 
     return token;
   };
@@ -362,6 +367,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const setLanguage = (lang: LanguageCode, name: string) => {
     setSelectedLanguage(lang);
     setSelectedDialectName(name);
+    // Keep the document language in sync so :lang() script rules (line-height,
+    // shaping hints) apply to the whole tree, not just React state.
+    if (typeof document !== 'undefined') {
+      document.documentElement.lang = lang.split('-')[0];
+    }
   };
 
   const setDistrict = (district: string) => {
@@ -484,10 +494,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     writePendingGrievances([]);
   };
 
-  const establishSession = (session: AadhaarSession) => {    setAadhaarSession(session);
+  const establishSession = (session: AadhaarSession, landing: ScreenType) => {
+    setAadhaarSession(session);
     setIsAadhaarLoggedIn(true);
-    // Additive gate: only certified Day-90+ beneficiaries skip the legacy dashboard.
-    setCurrentScreen(landingScreenFor(session));
+    setCurrentScreen(landing);
   };
 
   // Aadhaar Login Handlers
@@ -520,7 +530,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         whatsappNumber: null
       };
 
-      establishSession(session);
+      // Verified Aadhaar holders continue straight into the voice assistant.
+      establishSession(session, 'voice-chat');
       return true;
     }
     return false;
@@ -545,7 +556,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       whatsappNumber: null
     };
 
-    establishSession(session);
+    // Judge shortcut keeps the dashboard landing so application status is inspectable.
+    establishSession(session, landingScreenFor(session));
   };
 
   const logoutAadhaar = () => {
@@ -553,8 +565,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setAadhaarSession(null);
     setAadhaarNumber('');
     setLifecycleEnrollment(null);
+    setServicesPanelOpen(false);
     setCurrentScreen('aadhaar-login');
   };
+
+  const openServicesPanel = (tab: ServicesPanelTab = servicesPanelTab) => {
+    setServicesPanelTab(tab);
+    setServicesPanelOpen(true);
+  };
+
+  const closeServicesPanel = () => setServicesPanelOpen(false);
 
   return (
     <AppContext.Provider
@@ -578,6 +598,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setScreen: setCurrentScreen,
         setLanguage,
         setDistrict,
+        servicesPanelOpen,
+        servicesPanelTab,
+        openServicesPanel,
+        closeServicesPanel,
         saveInterviewResult,
         triggerSync,
         qrToken,

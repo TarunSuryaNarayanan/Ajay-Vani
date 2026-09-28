@@ -1,12 +1,13 @@
-export type LanguageCode = 
-  | 'hi-IN' 
-  | 'bho-IN' 
-  | 'bun-IN' 
-  | 'chg-IN' 
-  | 'mai-IN' 
-  | 'ta-IN' 
-  | 'te-IN' 
-  | 'mr-IN' 
+export type LanguageCode =
+  | 'hi-IN'
+  | 'en-IN'
+  | 'bho-IN'
+  | 'bun-IN'
+  | 'chg-IN'
+  | 'mai-IN'
+  | 'ta-IN'
+  | 'te-IN'
+  | 'mr-IN'
   | 'bn-IN';
 
 export interface DialectOption {
@@ -98,6 +99,7 @@ export interface QRToken {
   district: string;
   generatedAt: number;
   isUsed: boolean;
+  qrDataUrl?: string;
 }
 
 export interface AadhaarSession {
@@ -199,12 +201,18 @@ export interface PostTrainingJobOpening {
   roleTitleHi: string;
   nsqfQpCode: string;
   district: string;
-  vacancies: number;
-  monthlyStipend: string;
+  /**
+   * Live vacancy counts are not part of a training-centre dataset, so these stay
+   * null rather than being estimated. The UI must show the unavailable state
+   * instead of implying a hiring figure we cannot substantiate.
+   */
+  vacancies: number | null;
+  monthlyStipend: string | null;
   contactPhone: string;
   address: string;
   distanceKm: number;
   isCertifiedMatch: boolean;
+  dataSource?: 'demo' | 'government';
 }
 
 export type ScreenType = 

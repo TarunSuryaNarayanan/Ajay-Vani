@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { SpeakerIcon, CheckIcon } from '../components/Icons';
 import { speechService } from '../services/speech';
+import { getAadhaarText } from '../services/translations';
 
 export const AadhaarOtpScreen: React.FC = () => {
   const { aadhaarNumber, verifyAadhaarOtp, selectedLanguage, setScreen } = useApp();
@@ -9,11 +10,13 @@ export const AadhaarOtpScreen: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
 
+  const t = (key: string) => getAadhaarText(selectedLanguage || 'hi-IN', key);
+
   const masked = aadhaarNumber 
     ? `XXXX XXXX ${aadhaarNumber.slice(-4)}`
     : 'XXXX XXXX 7777';
 
-  const spokenPrompt = `आपके पंजीकृत मोबाइल नंबर पर 4 अंकों का ओटीपी भेज दिया गया है। ओटीपी दर्ज करें या 1 2 3 4 भरें।`;
+  const spokenPrompt = t('otpPrompt');
 
   const handlePlayVoice = () => {
     speechService.speak(
@@ -44,7 +47,7 @@ export const AadhaarOtpScreen: React.FC = () => {
     const code = codeToTest || otp;
     const success = verifyAadhaarOtp(code);
     if (!success) {
-      setErrorMessage("अमान्य ओटीपी। कृपया पुनः प्रयास करें या '1234' दर्ज करें।");
+      setErrorMessage(t('otpInvalid'));
     }
   };
 
@@ -60,10 +63,10 @@ export const AadhaarOtpScreen: React.FC = () => {
         <div className="flex items-start justify-between">
           <div>
             <h1 className="font-display text-2xl text-ink">
-              मोबाइल ओटीपी सत्यापन
+              {t('otpTitle')}
             </h1>
             <p className="font-caption text-sm text-ink-muted mt-1">
-              आधार संख्या: <strong className="font-mono text-ink">{masked}</strong>
+              {t('otpAadhaarLabel')} <strong className="font-mono text-ink">{masked}</strong>
             </p>
           </div>
           <button
@@ -71,7 +74,7 @@ export const AadhaarOtpScreen: React.FC = () => {
             className={`w-11 h-11 rounded border flex items-center justify-center transition-colors ${
               isPlayingAudio ? 'bg-action text-white border-action' : 'bg-surface border-line text-trust'
             }`}
-            aria-label="ओटीपी निर्देश सुनें"
+            aria-label={t('aadhaarListenGuide')}
           >
             <SpeakerIcon size={20} color={isPlayingAudio ? '#FFFFFF' : '#009378'} />
           </button>
@@ -81,10 +84,10 @@ export const AadhaarOtpScreen: React.FC = () => {
         <div className="card-flat bg-emerald-50 border-emerald-200 p-4 space-y-1">
           <div className="flex items-center space-x-2 text-emerald-800 font-bold text-xs">
             <CheckIcon size={16} color="#064e3b" />
-            <span>ओटीपी सफलतापूर्वक भेजा गया (SMS Sent)</span>
+            <span>{t('otpSentBadge')}</span>
           </div>
           <p className="text-xs text-emerald-900 mt-1">
-            आपके आधार से लिंक मोबाइल नंबर पर 4 अंकों का सत्यापन कोड भेजा गया है।
+            {t('otpSentBody')}
           </p>
         </div>
 
@@ -119,7 +122,7 @@ export const AadhaarOtpScreen: React.FC = () => {
             onClick={handleAutoFillDemoOtp}
             className="inline-flex items-center space-x-1 text-xs font-bold text-trust hover:underline bg-trust/10 px-3 py-1.5 rounded-full"
           >
-            <span>✨ डेमों ओटीपी भरें (Auto-fill "1234")</span>
+            <span>✨ {t('otpAutoFill')}</span>
           </button>
         </div>
 
@@ -138,7 +141,7 @@ export const AadhaarOtpScreen: React.FC = () => {
             onClick={() => setOtp('')}
             className="bg-surface border border-line text-ink-muted rounded-lg text-xs font-bold hover:bg-black/5"
           >
-            साफ़
+            {t('aadhaarClear')}
           </button>
           <button
             onClick={() => handleKeyPress('0')}
@@ -162,14 +165,14 @@ export const AadhaarOtpScreen: React.FC = () => {
           disabled={otp.length < 4}
           className={`btn-primary w-full ${otp.length < 4 ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
-          सत्यापित करें एवं डैशबोर्ड खोलें
+          {t('otpVerify')}
         </button>
 
         <button
           onClick={() => setScreen('aadhaar-login')}
           className="btn-secondary w-full text-xs"
         >
-          वापस आधार नंबर बदलें
+          {t('otpChangeNumber')}
         </button>
       </div>
     </div>

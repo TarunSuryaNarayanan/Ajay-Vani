@@ -16,6 +16,13 @@ const DIALECT_OPTIONS: DialectOption[] = [
     sampleGreeting: 'नमस्ते! मैं आपका पीएम-अजय ग्राम सहायक हूँ। आप किस काम में आगे बढ़ना चाहते हैं?'
   },
   {
+    code: 'en-IN',
+    name: 'English',
+    nativeName: 'English',
+    region: 'Urban / Officials',
+    sampleGreeting: 'Hello! I am your PM-AJAY village assistant. Which work would you like to learn next?'
+  },
+  {
     code: 'bho-IN',
     name: 'Bhojpuri',
     nativeName: 'भोजपुरी',
@@ -77,6 +84,7 @@ export const LanguageSelectionScreen: React.FC = () => {
   const { setLanguage, setScreen, selectedLanguage, setPrivacyOpen, setTermsOpen } = useApp();
   const [playingCode, setPlayingCode] = useState<LanguageCode | null>(null);
   const [packState, setPackState] = useState<PackState>('not_downloaded');
+  const [isVoiceAvailable, setIsVoiceAvailable] = useState<boolean | null>(null);
 
   useEffect(() => {
     if (selectedLanguage) {
@@ -93,6 +101,17 @@ export const LanguageSelectionScreen: React.FC = () => {
 
   const uiText = getUiText(selectedLanguage || 'hi-IN', 'selectLanguage');
   const subtitle = getUiText(selectedLanguage || 'hi-IN', 'subtitle');
+  const voiceUnavailable = getUiText(selectedLanguage || 'hi-IN', 'voiceUnavailable');
+
+  // Previews need one of the three backends: Bhashini keys, the host's espeak-ng,
+  // or a downloaded model pack. Warn up front rather than failing silently.
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([speechService.isBhashiniAvailable(), speechService.isLocalTtsAvailable()])
+      .then(([bhashini, localTts]) => { if (!cancelled) setIsVoiceAvailable(bhashini || localTts); })
+      .catch(() => { if (!cancelled) setIsVoiceAvailable(false); });
+    return () => { cancelled = true; };
+  }, []);
 
   const handlePreviewAudio = (e: React.MouseEvent, dialect: DialectOption) => {
     e.stopPropagation();
@@ -108,7 +127,11 @@ export const LanguageSelectionScreen: React.FC = () => {
       dialect.code,
       undefined,
       () => setPlayingCode(null),
-      (err) => console.warn('[LanguageSelection] TTS preview error:', err)
+      (err) => {
+        setPlayingCode(null);
+        setIsVoiceAvailable(false);
+        console.warn('[LanguageSelection] TTS preview error:', err);
+      }
     );
   };
 
@@ -126,7 +149,7 @@ export const LanguageSelectionScreen: React.FC = () => {
       });
     }
 
-    setScreen('voice-chat');
+    setScreen('aadhaar-login');
   };
 
   return (
@@ -143,6 +166,12 @@ export const LanguageSelectionScreen: React.FC = () => {
         </div>
 
         {/* Dialect Tiles Grid */}
+        {isVoiceAvailable === false && (
+          <div className="mb-4 card-flat bg-amber-50 border-amber-200 p-3 flex items-start gap-2">
+            <span aria-hidden="true">🔇</span>
+            <p className="text-[11px] text-amber-900 leading-relaxed">{voiceUnavailable}</p>
+          </div>
+        )}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" role="list">
           {DIALECT_OPTIONS.map((dialect) => {
             const isPlaying = playingCode === dialect.code;

@@ -31,41 +31,27 @@ export const VoiceChatScreen: React.FC = () => {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [spokenPrompt, setSpokenPrompt] = useState('आपको किस काम का अनुभव है? आप क्या नया काम शुरू करना चाहते हैं?');
+  const [spokenPrompt, setSpokenPrompt] = useState('');
   const [lastAIResponse, setLastAIResponse] = useState<string | null>(null);
   const [packState] = useState(() => packStateManager.getState(selectedLanguage || 'hi-IN'));
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const waveformRef = useRef<WaveformVisualizer | null>(null);
 
-  const DISTRICT_AUDIO_PROMPT = "नमस्ते! कृपया स्क्रीन पर दिए गए सूची से अपना ज़िला (district) चुनें।";
     // Initial welcome greeting when screen loads
   useEffect(() => {
     waveformRef.current = new WaveformVisualizer();
 
-    const welcomeGreeting = selectedLanguage === 'ta-IN'
-      ? 'வணக்கம்! நான் உங்கள் பிஎம்-அஜய் கிராம உதவியாளர். எந்த வேலை கற்க விரும்புகிறீர்கள்?'
-      : selectedLanguage === 'te-IN'
-      ? 'నమస్కారం! నేను మీ పిఎం-అజయ్ గ్రామ సహాయకుడిని. మీరు ఏ పని నేర్చుకోవాలి?'
-      : selectedLanguage === 'mr-IN'
-      ? 'नमस्कार! मी तुमचा पीएम-अजय ग्राम सहाय्यक आहे. तुम्हाला कोणत्या कामाचा अनुभव आहे?'
-      : selectedLanguage === 'bn-IN'
-      ? 'নমস্কার! আমি আপনার পিএম-অজয় গ্রাম সহায়ক। আপনি কোন কাজ শিখতে চান?'
-      : selectedLanguage.includes('bho')
-      ? 'राम राम भाई! हम आपके ग्राम सहायक बानी। रउवा कवन काम के अनुभव बा? खुल के बोलीं।'
-      : selectedLanguage.includes('bun')
-      ? 'राम राम भइया! हम आपके ग्राम सहायक हैं। आप बताओ कौन सो काम सीखवे की इच्छा है?'
-      : selectedLanguage.includes('chg')
-      ? 'जय जोहार संगी! मैं तोर ग्राम सहायक आंव। तंय कोन काम सीखे बर चाहत हस?'
-      : selectedLanguage.includes('mai')
-      ? 'प्रणाम! हम अहांक ग्राम सहायक छी। अहां कोन काज मे आगां बढ़य चाहैत छी?'
-      : 'नमस्ते! मैं आपका पीएम-अजय ग्राम सहायक हूँ। आपको किस काम का अनुभव है? बेझिझक बोलें।';
+    // Every spoken string comes from translations, so the chosen language is
+    // what the user actually hears from the very first prompt.
+    const welcomeGreeting = getUiText(selectedLanguage as LanguageCode, 'welcomeGreeting');
+    const districtPrompt = getUiText(selectedLanguage as LanguageCode, 'districtAudioPrompt');
 
     setSpokenPrompt(welcomeGreeting);
 
     const districtTimer = setTimeout(() => {
       speechService.speak(
-        DISTRICT_AUDIO_PROMPT,
+        districtPrompt,
         selectedLanguage,
         () => {},
         () => {
@@ -207,7 +193,7 @@ export const VoiceChatScreen: React.FC = () => {
           }
         );
       } catch (fallbackErr) {
-        setErrorMessage("सर्वर से उत्तर प्राप्त नहीं हुआ। कृपया दोबारा प्रयास करें।");
+        setErrorMessage(uiTexts.serverError);
       }
     } finally {
       setIsProcessing(false);
@@ -242,6 +228,12 @@ export const VoiceChatScreen: React.FC = () => {
     replayAudio: getUiText(selectedLanguage as LanguageCode, 'replayAudio'),
     stopRecording: getUiText(selectedLanguage as LanguageCode, 'stopRecording'),
     noAudio: getUiText(selectedLanguage as LanguageCode, 'noAudioDetected'),
+    serverError: getUiText(selectedLanguage as LanguageCode, 'serverError'),
+    samplePhrasesList: [
+      getUiText(selectedLanguage as LanguageCode, 'samplePhrase1'),
+      getUiText(selectedLanguage as LanguageCode, 'samplePhrase2'),
+      getUiText(selectedLanguage as LanguageCode, 'samplePhrase3'),
+    ],
   };
 
   return (
@@ -285,10 +277,10 @@ export const VoiceChatScreen: React.FC = () => {
         <button
           onClick={handleReplayAudio}
           className="mt-2 inline-flex items-center space-x-1.5 text-xs text-trust hover:text-trust/80 font-semibold cursor-pointer"
-          aria-label="फिर से सुनें"
+          aria-label={uiTexts.replayAudio}
         >
           <SpeakerIcon size={16} color="#009378" />
-          <span>फिर से सुनें (Listen again)</span>
+          <span>{uiTexts.replayAudio}</span>
         </button>
       </div>
 
@@ -347,24 +339,15 @@ export const VoiceChatScreen: React.FC = () => {
            {uiTexts.samplePhrases}
         </span>
         <div className="flex flex-col space-y-1.5">
-          <button
-            onClick={() => handleSamplePhrase("मेरा नाम रमेश है, मैं गांव में बिजली का काम करता हूँ और सोलर सीखना चाहता हूँ।")}
-            className="text-left text-xs p-2 rounded border border-line hover:border-trust bg-white text-ink active:bg-surface"
-          >
-            "मेरा नाम रमेश है, मैं गांव में बिजली का काम करता हूँ और सोलर सीखना चाहता हूँ।"
-          </button>
-          <button
-            onClick={() => handleSamplePhrase("हमार नाम श्यामू बा, हम गाय भैंस पालेनी और डेयरी के व्यवसाय बढ़ावे के बा।")}
-            className="text-left text-xs p-2 rounded border border-line hover:border-trust bg-white text-ink active:bg-surface"
-          >
-            "हमार नाम श्यामू बा, हम गाय भैंस पालेनी और डेयरी के व्यवसाय बढ़ावे के बा।"
-          </button>
-          <button
-            onClick={() => handleSamplePhrase("मेरा नाम रीता है, मैं साड़ी पर जरी जरदोजी और सिलाई का काम करती हूँ।")}
-            className="text-left text-xs p-2 rounded border border-line hover:border-trust bg-white text-ink active:bg-surface"
-          >
-            "मेरा नाम रीता है, मैं साड़ी पर जरी जरदोजी और सिलाई का काम करती हूँ।"
-          </button>
+          {uiTexts.samplePhrasesList.map((phrase) => (
+            <button
+              key={phrase}
+              onClick={() => handleSamplePhrase(phrase)}
+              className="text-left text-xs p-2 rounded border border-line hover:border-trust bg-white text-ink active:bg-surface"
+            >
+              "{phrase}"
+            </button>
+          ))}
         </div>
       </div>
     </div>

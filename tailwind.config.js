@@ -20,7 +20,19 @@ export default {
         offline: 'rgba(252, 138, 21, 0.12)',
       },
       fontFamily: {
-        sans: ['"Noto Sans"', '"Noto Sans Devanagari"', 'system-ui', 'sans-serif'],
+        sans: [
+          '"Noto Sans"',
+          '"Noto Sans Devanagari"',
+          '"Noto Sans Maithili"',
+          '"Noto Sans Tamil"',
+          '"Noto Sans Telugu"',
+          '"Noto Sans Malayalam"',
+          '"Noto Sans Marathi"',
+          '"Noto Sans Bengali"',
+          '"Nirmala UI"',
+          'system-ui',
+          'sans-serif',
+        ],
       },
       borderRadius: {
         DEFAULT: '8px',

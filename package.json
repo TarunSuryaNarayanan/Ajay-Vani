@@ -11,7 +11,11 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "start": "NODE_ENV=production tsx server/index.ts"
+    "models:fetch": "node scripts/fetch-local-asr-model.mjs",
+    "asr:verify": "tsx scripts/verify-local-asr.mjs",
+    "start": "NODE_ENV=production tsx server/index.ts",
+    "data:fetch": "tsx scripts/fetch-government-centres.mjs",
+    "asr:verify:web": "node scripts/verify-local-asr-web.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.3.0",

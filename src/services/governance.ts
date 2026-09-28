@@ -3,6 +3,7 @@ import {
   GrievanceIssueType,
   GrievanceMetadata,
   PostTrainingJobOpening,
+  PostTrainingPath,
   ScreenType,
   SkillingCenter,
   VoiceProcessResult,
@@ -206,4 +207,92 @@ export function jobMatchLabel(job: PostTrainingJobOpening): string {
 
 export function formatPostTrainingElapsed(days: number): string {
   return days > 0 ? `${days} दिन पूरे` : 'आज ही पूरा हुआ';
+}
+
+// ─── F3: spoken answer routing for the second conversation ───────────────────
+
+/**
+ * Keyword routing for the post-training question. The beneficiary answers out
+ * loud ("haan", "naukri chahiye", "Mudra lena hai") and the app picks the path.
+ * Intents are checked most-specific first, and every language contributes its
+ * own keywords because a yes/no answer alone cannot tell business from job.
+ */
+const PATH_INTENTS: Array<{ path: PostTrainingPath; keywords: string[] }> = [
+  {
+    path: 'mudra',
+    keywords: [
+      // Romanised Hindi/English
+      'mudra', 'loan', 'loon', 'lena', 'lene', 'capital', 'punji', 'taar', 'tār',
+      'paisa', 'badha', 'vadh',
+      // Devanagari
+      'मुद्रा', 'ऋण', 'लेना', 'पैसा', 'पूंजी', 'तार', 'बड़ा कर', 'चाहिए',
+      'कर्ज', 'चळण',
+      // Tamil
+      'கடனு', 'கடன்', 'வாடா', 'கடனு கொடு', 'பணம்',
+      // Telugu
+      'కర్జ', 'కజం', 'అప్పు', 'ప్రారంభ', 'అదనం',
+      // Bengali
+      'ঋণ', 'কর্জ', 'পুঁজি', 'টাকা',
+    ],
+  },
+  {
+    path: 'job',
+    keywords: [
+      // Romanised Hindi/English
+      'job', 'naukri', 'nokri', 'kami', 'rojgar', 'salaried', 'company', 'employer', 'placement',
+      // Devanagari
+      'नौकरी', 'नोकरी', 'काम', 'रोजगार', 'कंपनी', 'कम्पनी', 'नियोक्ता', 'प्लेसमेंट', 'सालरी',
+      // Tamil
+      'வேலை', 'நிறுவனம்', 'வேதித்த', 'அரசு வேலை',
+      // Telugu
+      'ఉద్యోగం', 'ఉద్యోగ', 'సంస్థ', 'పని',
+      // Bengali
+      'চাকরি', 'চাকরির', 'কর্পোরেট', 'ঠিকানা',
+    ],
+  },
+  {
+    path: 'business',
+    keywords: [
+      // Romanised Hindi/English
+      'business', 'vyapar', 'dukan', 'shop', 'khud', 'apna', 'own', 'start', 'self employed',
+      // Devanagari
+      'व्यापार', 'दुकान', 'दुकानदारी', 'अपना', 'खुद', 'शुरू', 'स्वरोजगार', 'व्यापार शुरू',
+      // Tamil
+      'தொடங்க', 'கடை', 'வணிகம்', 'தொழில்', 'சொந்த', 'வர்த்தகம்',
+      // Telugu
+      'వ్యాపారం', 'వ్యాపార', 'దుకాణం', 'ప్రారంభించ', 'కొటుక',
+      // Bengali
+      'ব্যবসা', 'ব্যবসার', 'দোকান', 'শুরু', 'নিজের',
+    ],
+  },
+];
+
+const AFFIRMATIVE = ['haan', 'हां', 'हाँ', 'ha', 'हा', 'yes', 'जी हाँ', 'jihaan', 'हो', 'होइ', 'ok', 'tha', 'था', 'ஆம்', 'అవును', 'হ্যাঁ', 'হ্যাঁ', 'আছে', 'হবে', 'wan', 'वां', 'चाहिए', 'चाहीए'];
+
+/**
+ * Resolves a spoken answer to a path. Returns null when nothing matches, so the
+ * caller can keep listening instead of guessing a path the user never chose.
+ */
+export function resolveSpokenPath(transcript: string): PostTrainingPath | null {
+  const text = ` ${(transcript || '').toLowerCase().replace(/\s+/g, ' ')} `;
+  if (!text.trim()) return null;
+
+  // "naukri nahi chahiye" must not route to the job path.
+  const negated = /(nahi|nahin|ना चाहिए|ना चाहीए|नहीं चाहिए|चाहिए मत|வேண்டாம்|வாடாத|வடவுடை|চাই না)/.test(text);
+
+  let best: { path: PostTrainingPath; score: number } | null = null;
+  for (const intent of PATH_INTENTS) {
+    const score = intent.keywords.reduce((acc, kw) => (text.includes(kw) ? acc + kw.length : acc), 0);
+    if (score > 0 && (!best || score > best.score)) {
+      best = { path: intent.path, score };
+    }
+  }
+
+  if (best) {
+    // A clear "no" only cancels the path when nothing else was named.
+    return negated ? null : best.path;
+  }
+
+  // Bare affirmation with no topic: default to the first path the screen offers.
+  return AFFIRMATIVE.some((kw) => text.includes(kw)) ? 'business' : null;
 }

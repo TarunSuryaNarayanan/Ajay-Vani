@@ -46,7 +46,7 @@ export function getCourseCompletion(beneficiaryId: string): CourseCompletionReco
   return courseCompletionStore[beneficiaryId] || null;
 }
 
-// ─── Path B: verified local employer registry query ──────────────────────────
+// ─── Path B: local training/certification partner lookup ─────────────────────
 
 function resolveDistrictData(districtName: string): DistrictMarketData {
   const query = (districtName || 'Varanasi').toLowerCase();
@@ -64,27 +64,35 @@ function resolveDistrictData(districtName: string): DistrictMarketData {
 const CERTIFIED_MATCH_BONUS = 'प्रमाणित NSQF मैच (Certified NSQF Match)';
 const DISTRICT_RELATED = 'ज़िला-सम्बंधित कौशल (District Skill Demand)';
 
-const WAGE_BANDS: Record<string, string> = {
-  1: '₹10,000 - ₹15,000 / माह',
-  2: '₹14,000 - ₹20,000 / माह',
-  3: '₹18,000 - ₹26,000 / माह',
-  4: '₹22,000 - ₹32,000 / माह',
+export const JOB_MATCH_LABELS = {
+  certified: CERTIFIED_MATCH_BONUS,
+  related: DISTRICT_RELATED,
 };
 
 /**
- * Queries the district market registry for employers hiring inside the
- * beneficiary's district for their certified NSQF skill code. Centres whose
- * `qpCode` matches the beneficiary's certification are surfaced first; the
- * remaining district openings are returned as clearly-labelled related demand.
+ * Path B. What this can honestly return is the list of training/certification
+ * partners in the district for the beneficiary's trade, with their real contact
+ * details — NOT job vacancies.
+ *
+ * A centre dataset carries no vacancy counts, no wage bands and no hiring
+ * employer, so those are deliberately left null instead of being derived from
+ * course duration or NSQF level. Showing "12 vacancies, ₹22,000/month" next to a
+ * real-looking centre would be inventing facts in front of a government
+ * beneficiary, so the UI renders the null case explicitly.
  */
 export function queryLocalEmployers(params: {
   district: string;
   qpCode: string;
   nsqfLevel?: number;
-}): { district: string; openings: PostTrainingJobOpening[]; exactMatches: number } {
+}): {
+  district: string;
+  openings: PostTrainingJobOpening[];
+  exactMatches: number;
+  liveVacancyData: false;
+  notice: string;
+} {
   const districtData = resolveDistrictData(params.district);
   const qpCode = (params.qpCode || '').trim();
-  const level = params.nsqfLevel && params.nsqfLevel > 0 ? params.nsqfLevel : 3;
 
   const openings: PostTrainingJobOpening[] = districtData.centers.map((center) => {
     const isCertifiedMatch = !!qpCode && (center.qpCode || '') === qpCode;
@@ -97,12 +105,14 @@ export function queryLocalEmployers(params: {
       roleTitleHi: center.courseNameHi,
       nsqfQpCode: center.qpCode || '—',
       district: center.district,
-      vacancies: center.durationHours >= 300 ? 12 : 8,
-      monthlyStipend: WAGE_BANDS[String(level)] || WAGE_BANDS['3'],
+      // Not present in a centre dataset. Left null on purpose — see above.
+      vacancies: null,
+      monthlyStipend: null,
       contactPhone: center.coordinatorPhone,
       address: center.address,
       distanceKm: center.distanceKm ?? 0,
       isCertifiedMatch,
+      dataSource: 'demo',
     };
   });
 
@@ -116,10 +126,8 @@ export function queryLocalEmployers(params: {
     district: districtData.district,
     openings,
     exactMatches: openings.filter((o) => o.isCertifiedMatch).length,
+    liveVacancyData: false,
+    notice:
+      'This list shows training and certification partners in your district, not live job vacancies. Vacancy counts and wages are not published in this dataset.',
   };
 }
-
-export const JOB_MATCH_LABELS = {
-  certified: CERTIFIED_MATCH_BONUS,
-  related: DISTRICT_RELATED,
-};

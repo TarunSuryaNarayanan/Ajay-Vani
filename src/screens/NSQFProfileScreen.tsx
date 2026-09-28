@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { BriefcaseIcon, GraduationCapIcon, MapPinIcon, SpeakerIcon, QRCodeIcon } from '../components/Icons';
 import { speechService } from '../services/speech';
-import QRCode from 'qrcode';
 
 export const NSQFProfileScreen: React.FC = () => {
   const { currentResult, selectedLanguage, setScreen, aadhaarSession, generateQRToken } = useApp();
@@ -60,23 +59,8 @@ export const NSQFProfileScreen: React.FC = () => {
     setIsGeneratingQR(true);
     try {
       const token = await generateQRToken();
-      if (token) {
-        const payload = JSON.stringify({
-          tokenId: token.tokenId,
-          beneficiaryName: token.beneficiaryName,
-          aadhaarMasked: token.aadhaarMasked,
-          nsqfQpCode: token.nsqfQpCode,
-          nsqfRoleNameHi: token.nsqfRoleNameHi,
-          district: token.district,
-          generatedAt: token.generatedAt,
-        });
-        const dataUrl = await QRCode.toDataURL(payload, {
-          errorCorrectionLevel: 'M',
-          width: 256,
-          margin: 2,
-          color: { dark: '#000000', light: '#FFFFFF' },
-        });
-        setQrDataUrl(dataUrl);
+      if (token && token.qrDataUrl) {
+        setQrDataUrl(token.qrDataUrl);
       }
     } catch (e) {
       console.warn('[NSQFProfile] QR generation error:', e);

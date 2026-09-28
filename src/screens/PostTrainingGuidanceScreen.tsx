@@ -6,20 +6,20 @@ import {
   CheckIcon,
   BriefcaseIcon,
   AlertIcon,
+  MicIcon,
 } from '../components/Icons';
 import { speechService } from '../services/speech';
 import { generateBusinessProposalPDF } from '../services/pdfGenerator';
 import { fetchLocalEmployers } from '../services/api';
 import {
-  BDO_SUBMISSION_CHECKLIST,
-  MUDRA_LOAN_STEPS,
-  POST_TRAINING_VOICE_PROMPTS,
   daysSinceCompletion,
   formatPostTrainingElapsed,
   isPostTrainingEligible,
-  jobMatchLabel,
+  resolveSpokenPath,
 } from '../services/governance';
-import { BeneficiaryProfile, PostTrainingJobOpening, PostTrainingPath, RecommendedNSQF } from '../types';
+import { getPostTrainingCopy } from '../services/postTrainingTranslations';
+import { localTradeName } from '../services/spokenResponse';
+import { BeneficiaryProfile, LanguageCode, PostTrainingJobOpening, PostTrainingPath, RecommendedNSQF } from '../types';
 
 const FALLBACK_PROFILE: BeneficiaryProfile = {
   beneficiaryName: 'रमेश कुमार',
@@ -48,14 +48,34 @@ export const PostTrainingGuidanceScreen: React.FC = () => {
   const [openings, setOpenings] = useState<PostTrainingJobOpening[] | null>(null);
   const [jobsError, setJobsError] = useState<string | null>(null);
   const [isLoadingJobs, setIsLoadingJobs] = useState(false);
+  const [isListeningForAnswer, setIsListeningForAnswer] = useState(false);
+  const [heardAnswer, setHeardAnswer] = useState<string | null>(null);
 
+  const copy = getPostTrainingCopy(selectedLanguage as LanguageCode);
   const profile = currentResult?.profile || FALLBACK_PROFILE;
   const nsqf = currentResult?.recommendedNSQF || FALLBACK_NSQF;
+  // Devanagari languages get the Hindi trade name; everyone else gets the one
+  // their voice can actually pronounce.
+  const tradeName = localTradeName(
+    {
+      beneficiaryName: '',
+      qpCode: nsqf.qpCode,
+      roleName: nsqf.roleName,
+      roleNameHi: nsqf.roleNameHi,
+      district: selectedDistrict,
+      centreCount: 0,
+    },
+    selectedLanguage as LanguageCode
+  );
   const completedAt = aadhaarSession?.completedAt ?? null;
   const eligible = isPostTrainingEligible(aadhaarSession);
   const elapsedDays = daysSinceCompletion(completedAt);
   const unlocked = !!aadhaarSession && !!aadhaarSession.courseCompleted && !!completedAt;
-  const openerText = `${POST_TRAINING_VOICE_PROMPTS.business} ${POST_TRAINING_VOICE_PROMPTS.job}`;
+  const openerText = format(
+    copy.openerCombined,
+    copy.prompts.business,
+    copy.prompts.job
+  );
 
   // Plays the opening prompt once when the second conversation loop opens.
   useEffect(() => {
@@ -69,9 +89,51 @@ export const PostTrainingGuidanceScreen: React.FC = () => {
   }, [unlocked]);
 
   const handlePlayPrompt = (path: PostTrainingPath) => {
-    speechService.speak(POST_TRAINING_VOICE_PROMPTS[path], selectedLanguage, () => setIsPlayingAudio(true), () =>
+    speechService.speak(copy.prompts[path], selectedLanguage, () => setIsPlayingAudio(true), () =>
       setIsPlayingAudio(false)
     );
+  };
+
+  // Small %s helper: these strings are authored printf-style.
+  function format(template: string, ...values: (string | number)[]): string {
+    let i = 0;
+    return template.replace(/%s/g, () => String(values[i++] ?? ''));
+  }
+
+  /**
+   * The second conversation is a real exchange: Gram Sahayak asks, the
+   * beneficiary answers out loud, and the answer picks the path. Tapping a
+   * path still works, so this only adds a way in.
+   */
+  const handleVoiceAnswer = async () => {
+    if (isListeningForAnswer) {
+      await speechService.stopListening();
+      setIsListeningForAnswer(false);
+      return;
+    }
+
+    setHeardAnswer(null);
+    setIsListeningForAnswer(true);
+
+    try {
+      await speechService.startListening(
+        selectedLanguage,
+        (text: string, isFinal: boolean) => {
+          if (!isFinal) return;
+          setIsListeningForAnswer(false);
+          setHeardAnswer(text);
+          const path = resolveSpokenPath(text);
+          if (path) {
+            selectPath(path);
+            handlePlayPrompt(path);
+          }
+        },
+        () => setIsListeningForAnswer(false),
+        () => setIsListeningForAnswer(false)
+      );
+    } catch {
+      setIsListeningForAnswer(false);
+    }
   };
 
   const handleGeneratePDF = () => {
@@ -96,7 +158,7 @@ export const PostTrainingGuidanceScreen: React.FC = () => {
       setOpenings(result.openings);
     } catch (e) {
       setOpenings([]);
-      setJobsError('नौकरी सूची लोड नहीं हो सकी। इंटरनेट कनेक्शन जाँचें।');
+      setJobsError(copy.jobsError);
     } finally {
       setIsLoadingJobs(false);
     }
@@ -119,17 +181,16 @@ export const PostTrainingGuidanceScreen: React.FC = () => {
           <div className="card-flat bg-white border-line p-4 flex items-start space-x-3">
             <AlertIcon size={18} color="#C6482E" />
             <p className="text-xs text-ink leading-relaxed">
-              यह मार्गदर्शन केवल प्रमाणित एवं पूर्ण प्रशिक्षण (दिन 90+) वाले लाभार्थियों के लिए खुलता है।
-              आपका प्रशिक्षण अभी जारी है — नीचे दिए पुराने अनुदान पथ का उपयोग करें।
+              {copy.lockedBody}
             </p>
           </div>
         </div>
         <div className="space-y-2">
           <button onClick={() => setScreen('micro-finance')} className="btn-primary w-full">
-            ₹50,000 अनुदान पथ खोलें (पुराना पथ)
+            {copy.lockedOpenLegacy}
           </button>
           <button onClick={() => setScreen('beneficiary-dashboard')} className="btn-secondary w-full">
-            डैशबोर्ड पर लौटें
+            {copy.backToDashboard}
           </button>
         </div>
       </div>
@@ -141,13 +202,13 @@ export const PostTrainingGuidanceScreen: React.FC = () => {
       <div className="space-y-4">
         <div className="flex items-start justify-between">
           <div>
-            <h1 className="font-display text-2xl text-ink">प्रशिक्षणोत्तर मार्गदर्शन</h1>
+            <h1 className="font-display text-2xl text-ink">{copy.screenTitle}</h1>
             <p className="font-caption text-sm text-ink-muted mt-1">
-              प्रमाणित ट्रेड: {nsqf.roleNameHi} ({nsqf.qpCode})
+              {format(copy.certifiedTrade, tradeName, nsqf.qpCode)}
             </p>
             {elapsedDays !== null && (
               <p className="text-[11px] text-trust font-semibold mt-1">
-                प्रशिक्षण पूर्ण: {formatPostTrainingElapsed(elapsedDays)}
+                {format(copy.trainingCompleted, formatPostTrainingElapsed(elapsedDays))}
               </p>
             )}
           </div>
@@ -160,7 +221,7 @@ export const PostTrainingGuidanceScreen: React.FC = () => {
             className={`w-11 h-11 rounded border flex items-center justify-center transition-colors ${
               isPlayingAudio ? 'bg-action text-white border-action' : 'bg-surface border-line text-trust'
             }`}
-            aria-label="मार्गदर्शन सुनें"
+            aria-label={copy.listenAria}
           >
             <SpeakerIcon size={20} color={isPlayingAudio ? '#FFFFFF' : '#009378'} />
           </button>
@@ -168,19 +229,36 @@ export const PostTrainingGuidanceScreen: React.FC = () => {
 
         {!eligible && (
           <div className="card-flat bg-amber-50 border-amber-200 p-3 text-xs text-amber-900">
-            दिन 90 की अवधि पूरी नहीं हुई है — यह पूर्वावलोकन (preview) है। पूर्ण दिन 90 के बाद यह मार्गदर्शन
-            स्वतः खुलेगा।
+            {copy.previewNotice}
           </div>
         )}
 
         {/* AI voice prompt + the three guided paths */}
         <div className="card-flat bg-trust/5 border-trust/20 p-4 space-y-3">
           <span className="font-caption text-xs text-trust uppercase font-semibold block">
-            एआई वॉइस प्रॉम्प्ट (Second Conversation Loop)
+            {copy.promptLabel}
           </span>
           <p className="text-sm font-medium text-ink leading-relaxed">
-            “{POST_TRAINING_VOICE_PROMPTS.business} — या — {POST_TRAINING_VOICE_PROMPTS.job}”
+            “{openerText}”
           </p>
+
+          {/* The beneficiary can answer out loud; tapping a path below still works. */}
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <button
+              onClick={handleVoiceAnswer}
+              className={`btn-secondary text-xs inline-flex items-center gap-1.5 ${
+                isListeningForAnswer ? 'bg-action/10 border-action' : ''
+              }`}
+              aria-pressed={isListeningForAnswer}
+            >
+              <MicIcon size={16} color={isListeningForAnswer ? '#FC8A15' : '#009378'} />
+              {isListeningForAnswer ? copy.voiceListening : copy.answerByVoice}
+            </button>
+            <span className="text-[11px] text-ink-muted">{copy.voiceAnswerHint}</span>
+          </div>
+          {heardAnswer && (
+            <p className="text-[11px] text-ink-muted pt-1">{format(copy.voiceHeard, heardAnswer)}</p>
+          )}
 
           <div className="space-y-2 pt-1">
             {/* Path A */}
@@ -195,9 +273,9 @@ export const PostTrainingGuidanceScreen: React.FC = () => {
             >
               <DocumentIcon size={18} color="#009378" />
               <span className="flex-1">
-                <span className="block text-sm font-bold text-ink">पथ A: अपना व्यापार शुरू करें</span>
+                <span className="block text-sm font-bold text-ink">{copy.pathBusinessTitle}</span>
                 <span className="block text-[11px] text-ink-muted mt-0.5">
-                  ₹50,000 पीएम-अजय व्यापार प्रस्ताव + बीडीओ जमा चेकलिस्ट
+                  {copy.pathBusinessSub}
                 </span>
               </span>
             </button>
@@ -214,9 +292,9 @@ export const PostTrainingGuidanceScreen: React.FC = () => {
             >
               <BriefcaseIcon size={18} color="#009378" />
               <span className="flex-1">
-                <span className="block text-sm font-bold text-ink">पथ B: नौकरी खोजें</span>
+                <span className="block text-sm font-bold text-ink">{copy.pathJobTitle}</span>
                 <span className="block text-[11px] text-ink-muted mt-0.5">
-                  {selectedDistrict} ज़िले में आपके NSQF कोड ({nsqf.qpCode}) के लिए सत्यापित नियोक्ता
+                  {format(copy.pathJobSub, selectedDistrict, nsqf.qpCode)}
                 </span>
               </span>
             </button>
@@ -233,9 +311,9 @@ export const PostTrainingGuidanceScreen: React.FC = () => {
             >
               <span className="text-trust font-bold text-lg leading-none pt-0.5">₹</span>
               <span className="flex-1">
-                <span className="block text-sm font-bold text-ink">पथ C: पीएम मुद्रा ऋण</span>
+                <span className="block text-sm font-bold text-ink">{copy.pathMudraTitle}</span>
                 <span className="block text-[11px] text-ink-muted mt-0.5">
-                  ₹10 लाख तक — अनुदान से परे की पूंजी हेतु निकटतम बैंक शाखा में आवेदन
+                  {copy.pathMudraSub}
                 </span>
               </span>
             </button>
@@ -247,28 +325,28 @@ export const PostTrainingGuidanceScreen: React.FC = () => {
           <div className="space-y-3">
             <div className="card-flat bg-white border-line p-4 space-y-1.5">
               <span className="font-caption text-xs text-ink-muted uppercase font-bold block">
-                स्वतः भरे गए विवरण (Auto-Populated from Certification)
+                {copy.autoFilledLabel}
               </span>
               <div className="text-xs space-y-1 pt-1">
-                <p><span className="text-ink-muted">लाभार्थी:</span> <strong className="text-ink">{profile.beneficiaryName}</strong></p>
-                <p><span className="text-ink-muted">प्रमाणित ट्रेड:</span> <strong className="text-ink">{nsqf.roleNameHi}</strong></p>
-                <p><span className="text-ink-muted">QP कोड:</span> <strong className="text-ink font-mono">{nsqf.qpCode}</strong></p>
-                <p><span className="text-ink-muted">ज़िला:</span> <strong className="text-ink">{selectedDistrict}</strong></p>
-                <p><span className="text-ink-muted">अनुदान:</span> <strong className="text-trust">₹50,000 GIA</strong></p>
+                <p><span className="text-ink-muted">{copy.fieldBeneficiary}:</span> <strong className="text-ink">{profile.beneficiaryName}</strong></p>
+                <p><span className="text-ink-muted">{copy.fieldTrade}:</span> <strong className="text-ink">{tradeName}</strong></p>
+                <p><span className="text-ink-muted">{copy.fieldQp}:</span> <strong className="text-ink font-mono">{nsqf.qpCode}</strong></p>
+                <p><span className="text-ink-muted">{copy.fieldDistrict}:</span> <strong className="text-ink">{selectedDistrict}</strong></p>
+                <p><span className="text-ink-muted">{copy.fieldGrant}:</span> <strong className="text-trust">₹50,000 GIA</strong></p>
               </div>
             </div>
 
             <span className="font-caption text-xs text-ink-muted uppercase font-semibold block">
-              बीडीओ को भौतिक जमा हेतु चरण (Submission Checklist)
+              {copy.checklistLabel}
             </span>
-            {BDO_SUBMISSION_CHECKLIST.map((step, idx) => (
+            {copy.checklist.map((step) => (
               <div key={step.title} className="card-flat bg-white border-line p-3 flex items-start space-x-3">
                 <div className="w-6 h-6 rounded-full bg-trust/10 text-trust flex items-center justify-center shrink-0 mt-0.5">
                   <CheckIcon size={14} color="#009378" />
                 </div>
                 <div className="text-xs">
                   <span className="font-bold text-ink block text-sm">
-                    {idx + 1}. {step.title}
+                    {step.title}
                   </span>
                   <p className="text-ink-muted mt-0.5">{step.body}</p>
                 </div>
@@ -281,18 +359,23 @@ export const PostTrainingGuidanceScreen: React.FC = () => {
         {activePath === 'job' && (
           <div className="space-y-2">
             <span className="font-caption text-xs text-ink-muted uppercase font-semibold block">
-              सत्यापित स्थानीय नियोक्ता ({selectedDistrict})
+              {format(copy.jobsLabel, selectedDistrict)}
             </span>
 
-            {isLoadingJobs && <p className="text-xs text-ink-muted">नौकरी सूची खोजी जा रही है...</p>}
+            {isLoadingJobs && <p className="text-xs text-ink-muted">{copy.jobsLoading}</p>}
             {jobsError && <p className="text-xs text-alert">{jobsError}</p>}
+
+            {/* Say plainly what this list is and is not. */}
+            <p className="text-[11px] text-ink-muted bg-surface rounded p-2 border border-line/60">
+              {copy.jobsDataNotice}
+            </p>
 
             {openings?.map((job) => (
               <div key={job.centerId} className="card-flat bg-white border-line p-3 space-y-1">
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <h4 className="text-sm font-bold text-ink">{job.roleTitleHi}</h4>
-                    <p className="text-[11px] text-ink-muted">{job.centerNameHi}</p>
+                    <p className="text-[11px] text-ink-muted">{job.centerName}</p>
                   </div>
                   <span
                     className={`text-[10px] font-bold px-2 py-0.5 rounded whitespace-nowrap ${
@@ -301,30 +384,40 @@ export const PostTrainingGuidanceScreen: React.FC = () => {
                         : 'bg-surface text-ink-muted border border-line'
                     }`}
                   >
-                    {jobMatchLabel(job)}
+                    {job.isCertifiedMatch ? copy.jobMatchCertified : copy.jobMatchRelated}
                   </span>
                 </div>
                 <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-ink-muted pt-1">
-                  <span>रिक्त पद: <strong className="text-ink">{job.vacancies}</strong></span>
-                  <span>वेतन: <strong className="text-ink">{job.monthlyStipend}</strong></span>
-                  <span>दूरी: <strong className="text-ink">{job.distanceKm} किमी</strong></span>
+                  <span>
+                    {copy.fieldVacancies}:{' '}
+                    <strong className="text-ink">
+                      {job.vacancies ?? copy.jobUnknownField}
+                    </strong>
+                  </span>
+                  <span>
+                    {copy.fieldWage}:{' '}
+                    <strong className="text-ink">
+                      {job.monthlyStipend ?? copy.jobUnknownField}
+                    </strong>
+                  </span>
+                  <span>{copy.fieldDistance}: <strong className="text-ink">{job.distanceKm} km</strong></span>
                 </div>
                 <p className="text-[11px] text-ink-muted">{job.address}</p>
                 <a
                   href={`tel:${job.contactPhone.replace(/\s/g, '')}`}
                   className="inline-block text-[11px] font-bold text-trust hover:underline"
                 >
-                  समन्वयक को कॉल करें: {job.contactPhone}
+                  {format(copy.jobCallCoordinator, job.contactPhone)}
                 </a>
               </div>
             ))}
 
             {openings && openings.length === 0 && !jobsError && (
-              <p className="text-xs text-ink-muted">इस ज़िले में आपके ट्रेड के लिए अभी सत्यापित रिक्त पद नहीं हैं।</p>
+              <p className="text-xs text-ink-muted">{copy.jobsEmpty}</p>
             )}
 
             <button onClick={loadJobs} className="btn-secondary w-full text-xs">
-              सूची पुनः लोड करें
+              {copy.reloadButton}
             </button>
           </div>
         )}
@@ -333,11 +426,9 @@ export const PostTrainingGuidanceScreen: React.FC = () => {
         {activePath === 'mudra' && (
           <div className="space-y-2">
             <div className="card-flat bg-trust/5 border-trust/20 p-3 text-xs text-ink leading-relaxed">
-              पीएम-अजय ₹50,000 अनुदान के बाद भी यदि व्यापार के लिए अधिक पूंजी चाहिए, तो
-              <strong> प्रधानमंत्री मुद्रा योजना </strong> के तहत ₹10 लाख तक का ऋण बिना कॉलेटरल लिया जा
-              सकता है। निकटतम बैंक शाखा या BRC केंद्र में आवेदन करें।
+              {copy.mudraIntro}
             </div>
-            {MUDRA_LOAN_STEPS.map((step) => (
+            {copy.mudraSteps.map((step) => (
               <div key={step.title} className="card-flat bg-white border-line p-3 flex items-start space-x-3">
                 <div className="w-6 h-6 rounded-full bg-trust/10 text-trust flex items-center justify-center shrink-0 mt-0.5">
                   <CheckIcon size={14} color="#009378" />
@@ -362,20 +453,20 @@ export const PostTrainingGuidanceScreen: React.FC = () => {
             <DocumentIcon size={18} color="#FFFFFF" />
             <span>
               {isGeneratingPDF
-                ? 'दस्तावेज़ तैयार हो रहा है...'
+                ? copy.pdfGenerating
                 : pdfGenerated
-                ? 'प्रस्ताव पुनः डाउनलोड करें'
-                : '₹50,000 व्यापार प्रस्ताव डाउनलोड करें'}
+                ? copy.pdfRedownload
+                : copy.pdfDownload}
             </span>
           </button>
         )}
 
         {/* Legacy fallback: the original pre-training grant flow stays reachable. */}
         <button onClick={() => setScreen('micro-finance')} className="btn-secondary w-full text-xs">
-          पुराना अनुदान पथ (Micro-Finance) खोलें
+          {copy.legacyPath}
         </button>
         <button onClick={() => setScreen('beneficiary-dashboard')} className="btn-secondary w-full text-xs">
-          डैशबोर्ड पर लौटें
+          {copy.backToDashboard}
         </button>
       </div>
     </div>
