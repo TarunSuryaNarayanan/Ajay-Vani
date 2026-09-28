@@ -82,54 +82,54 @@ export const Header: React.FC = () => {
 
       <div className="flex items-center space-x-1.5">
         {/* Complaints · Training lifecycle · QR token (side panel) */}
-        <button
-          onClick={() => openServicesPanel()}
-          className="px-2 py-1 rounded bg-black/20 text-surface hover:bg-black/30 text-xs font-bold flex items-center space-x-1"
-          aria-label={t('panelTitle')}
-        >
-          <BriefcaseIcon size={13} color="#F6F6F6" />
-          <span className="hidden sm:inline">{t('panelButton')}</span>
-        </button>
+        {isAadhaarLoggedIn && (
+          <>
+            <button
+              onClick={() => openServicesPanel()}
+              className="px-2 py-1 rounded bg-black/20 text-surface hover:bg-black/30 text-xs font-bold flex items-center space-x-1"
+              aria-label={t('panelTitle')}
+            >
+              <BriefcaseIcon size={13} color="#F6F6F6" />
+              <span className="hidden sm:inline">{t('panelButton')}</span>
+            </button>
 
-        {/* Ministry Monitoring Dashboard access (F1 grievance destination) */}
-        <button
-          onClick={() => setScreen('ministry-dashboard')}
-          className="relative px-2 py-1 rounded bg-black/20 text-surface hover:bg-black/30 text-xs font-bold"
-          aria-label="मंत्रालय निगरानी डैशबोर्ड"
-        >
-          <span>🏛️</span>
-          <span className="hidden sm:inline"> मंत्रालय</span>
-          {pendingGrievanceCount > 0 && (
-            <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-action text-surface text-[10px] font-bold flex items-center justify-center">
-              {pendingGrievanceCount}
-            </span>
-          )}
-        </button>
+            {/* Ministry Monitoring Dashboard access (F1 grievance destination) */}
+            <button
+              onClick={() => setScreen('ministry-dashboard')}
+              className="relative px-2 py-1 rounded bg-black/20 text-surface hover:bg-black/30 text-xs font-bold"
+              aria-label="मंत्रालय निगरानी डैशबोर्ड"
+            >
+              <span>🏛️</span>
+              <span className="hidden sm:inline"> मंत्रालय</span>
+              {pendingGrievanceCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-action text-surface text-[10px] font-bold flex items-center justify-center">
+                  {pendingGrievanceCount}
+                </span>
+              )}
+            </button>
 
-        {/* Aadhaar Dashboard Button */}
-        <button
-          onClick={() => setScreen(isAadhaarLoggedIn ? 'beneficiary-dashboard' : 'aadhaar-login')}
-          className={`px-2 py-1 rounded text-xs font-bold transition-colors flex items-center space-x-1 ${
-            isAadhaarLoggedIn 
-              ? 'bg-amber-400 text-amber-950 font-bold shadow-sm' 
-              : 'bg-black/20 text-surface hover:bg-black/30'
-          }`}
-          aria-label="आधार डैशबोर्ड"
-        >
-          <span>🆔</span>
-          <span>{isAadhaarLoggedIn ? 'डैशबोर्ड' : 'आधार'}</span>
-        </button>
+            {/* Aadhaar Dashboard Button */}
+            <button
+              onClick={() => setScreen('beneficiary-dashboard')}
+              className="px-2 py-1 rounded text-xs font-bold transition-colors flex items-center space-x-1 bg-amber-400 text-amber-950 font-bold shadow-sm"
+              aria-label="आधार डैशबोर्ड"
+            >
+              <span>🆔</span>
+              <span>डैशबोर्ड</span>
+            </button>
 
-        {/* Sync status indicator */}
-        <button
-          onClick={() => setScreen('offline-sync')}
-          className="px-2 py-1 rounded bg-black/15 flex items-center space-x-1 text-xs text-surface hover:bg-black/25"
-          aria-label="सिंक मॉनिटर"
-        >
-          <div className={`w-2 h-2 rounded-full ${!isOnline ? 'bg-action' : unsyncedCount > 0 ? 'bg-amber-400' : 'bg-positive'}`} />
-          <span>{unsyncedCount > 0 ? `${unsyncedCount}` : 'सिंक'}</span>
-          <SyncIcon size={12} color="#F6F6F6" />
-        </button>
+            {/* Sync status indicator */}
+            <button
+              onClick={() => setScreen('offline-sync')}
+              className="px-2 py-1 rounded bg-black/15 flex items-center space-x-1 text-xs text-surface hover:bg-black/25"
+              aria-label="सिंक मॉनिटर"
+            >
+              <div className={`w-2 h-2 rounded-full ${!isOnline ? 'bg-action' : unsyncedCount > 0 ? 'bg-amber-400' : 'bg-positive'}`} />
+              <span>{unsyncedCount > 0 ? `${unsyncedCount}` : 'सिंक'}</span>
+              <SyncIcon size={12} color="#F6F6F6" />
+            </button>
+          </>
+        )}
 
         {/* Selected language pill/button */}
         <button

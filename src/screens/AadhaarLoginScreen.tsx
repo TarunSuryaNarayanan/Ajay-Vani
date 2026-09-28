@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { SpeakerIcon, MicIcon } from '../components/Icons';
 import { speechService } from '../services/speech';
@@ -23,6 +23,12 @@ export const AadhaarLoginScreen: React.FC = () => {
     );
   };
 
+  useEffect(() => {
+    handlePlayVoice();
+    return () => speechService.stopSpeaking();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleKeyPress = (val: string) => {
     if (aadhaarInput.length < 12) {
       setAadhaarInput(prev => prev + val);
@@ -38,12 +44,93 @@ export const AadhaarLoginScreen: React.FC = () => {
   };
 
   const handleVoiceInput = () => {
-    setIsListeningVoice(true);
-    // Simulate speech recognition for 12-digit Aadhaar
-    setTimeout(() => {
-      setAadhaarInput('999988887777');
+    console.log('[AadhaarScreen] Mic button clicked! isListeningVoice=', isListeningVoice, '| lang=', selectedLanguage);
+    if (isListeningVoice) {
+      speechService.stopDirectListening();
       setIsListeningVoice(false);
-    }, 1800);
+      return;
+    }
+
+    setIsListeningVoice(true);
+    speechService.recognizeDirectly(
+      selectedLanguage || 'hi-IN',
+      (transcript, isFinal) => {
+        // Convert common spoken words and native digits to Arabic numerals for supported languages
+        const map: Record<string, string> = {
+          // English & Hindi
+          'zero': '0', 'शून्य': '0', 'सुन्ना': '0', '०': '0',
+          'one': '1', 'एक': '1', '१': '1',
+          'two': '2', 'दो': '2', '२': '2',
+          'three': '3', 'तीन': '3', '३': '3',
+          'four': '4', 'चार': '4', '४': '4',
+          'five': '5', 'पांच': '5', 'पाँच': '5', '५': '5',
+          'six': '6', 'छह': '6', 'छै': '6', '६': '6',
+          'seven': '7', 'सात': '7', '७': '7',
+          'eight': '8', 'आठ': '8', '८': '8',
+          'nine': '9', 'नौ': '9', '९': '9',
+          
+          // Telugu
+          'సున్నా': '0', '౦': '0',
+          'ఒకటి': '1', '౧': '1',
+          'రెండు': '2', '౨': '2',
+          'మూడు': '3', '౩': '3',
+          'నాలుగు': '4', '౪': '4',
+          'ఐదు': '5', '౫': '5',
+          'ఆరు': '6', '౬': '6',
+          'ఏడు': '7', '౭': '7',
+          'ఎనిమిది': '8', '౮': '8',
+          'తొమ్మిది': '9', '౯': '9',
+          
+          // Tamil
+          'சுழியம்': '0', 'பூஜ்ஜியம்': '0', '௦': '0',
+          'ஒன்று': '1', '௧': '1',
+          'இரண்டு': '2', '௨': '2',
+          'மூன்று': '3', '௩': '3',
+          'நான்கு': '4', '௪': '4',
+          'ஐந்து': '5', '௫': '5',
+          'ஆறு': '6', '௬': '6',
+          'ஏழு': '7', '௭': '7',
+          'எட்டு': '8', '௮': '8',
+          'ஒன்பது': '9', '௯': '9',
+          
+          // Bengali
+          'শূন্য': '0', '০': '0',
+          'এক': '1', '১': '1',
+          'দুই': '2', '২': '2',
+          'তিন': '3', '৩': '3',
+          'চার': '4', '৪': '4',
+          'পাঁচ': '5', '৫': '5',
+          'ছয়': '6', '৬': '6',
+          'সাত': '7', '৭': '7',
+          'আট': '8', '৮': '8',
+          'নয়': '9', '৯': '9',
+          
+          // Marathi specific (others share with Hindi)
+          'दोन': '2',
+          'पाच': '5',
+          'सहा': '6',
+          'नऊ': '9'
+        };
+        let parsed = transcript.toLowerCase();
+        Object.keys(map).forEach(key => {
+          parsed = parsed.split(key).join(map[key]);
+        });
+        
+        const digits = parsed.replace(/\D/g, '');
+        if (digits) {
+          setAadhaarInput(prev => {
+            const next = prev + digits;
+            return next.slice(0, 12);
+          });
+        }
+      },
+      (error) => {
+        console.warn('Voice input error:', error);
+      },
+      () => {
+        setIsListeningVoice(false);
+      }
+    );
   };
 
   const handleSubmit = (e?: React.FormEvent) => {

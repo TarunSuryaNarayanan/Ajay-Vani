@@ -166,12 +166,6 @@ export const LanguageSelectionScreen: React.FC = () => {
         </div>
 
         {/* Dialect Tiles Grid */}
-        {isVoiceAvailable === false && (
-          <div className="mb-4 card-flat bg-amber-50 border-amber-200 p-3 flex items-start gap-2">
-            <span aria-hidden="true">🔇</span>
-            <p className="text-[11px] text-amber-900 leading-relaxed">{voiceUnavailable}</p>
-          </div>
-        )}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" role="list">
           {DIALECT_OPTIONS.map((dialect) => {
             const isPlaying = playingCode === dialect.code;

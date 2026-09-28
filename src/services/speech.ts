@@ -97,8 +97,19 @@ export class SpeechService {
     onSpeechStart?: () => void
   ): void {
     this.currentLang = lang;
-    this.audioCaptureActive = true;
 
+    // Fast-path: if no local Whisper pack is ready for this language, the full
+    // VAD→ONNX→Bhashini pipeline will always fail and force the user to speak
+    // twice. Skip straight to WebSpeech so they only need to speak once.
+    const pack = getPackForLanguage(lang);
+    const packReady = pack && isPackConfigured(pack) && packStateManager.getState(lang) === 'ready';
+    if (!packReady && webSpeechAsrService.isSupported()) {
+      console.log('[SpeechService] No local pack ready — skipping VAD pipeline, using WebSpeech directly for lang=', lang);
+      this.recognizeDirectly(lang, onResult, onError, onEnd);
+      return;
+    }
+
+    this.audioCaptureActive = true;
     this.vadCallbacks = { onResult, onError, onEnd, onSpeechStart };
 
     const callbacks: AudioCaptureCallbacks = {
@@ -136,6 +147,47 @@ export class SpeechService {
         onEnd();
       }
     });
+  }
+
+  /**
+   * Lightweight direct WebSpeech recognition — no VAD, no ONNX, no Bhashini.
+   * Use for simple input screens (e.g. Aadhaar number entry) where the full
+   * pipeline is overkill and you just need live browser mic recognition.
+   */
+  public recognizeDirectly(
+    lang: LanguageCode,
+    onResult: (transcript: string, isFinal: boolean) => void,
+    onError: (error: string) => void,
+    onEnd: () => void
+  ): void {
+    console.log('[SpeechService] recognizeDirectly() called. lang=', lang);
+    if (!webSpeechAsrService.isSupported()) {
+      console.error('[SpeechService] WebSpeech NOT supported in this browser!');
+      onError('Speech recognition is not supported in this browser.');
+      onEnd();
+      return;
+    }
+    console.log('[SpeechService] WebSpeech IS supported. Starting recognition...');
+    this.webSpeechActive = true;
+    webSpeechAsrService.recognize(lang).then(result => {
+      this.webSpeechActive = false;
+      console.log('[SpeechService] recognizeDirectly result:', result);
+      if (result.success && result.transcript) {
+        console.log('[SpeechService] Got transcript:', result.transcript);
+        onResult(result.transcript, true);
+      } else {
+        console.warn('[SpeechService] No transcript. error=', result.error);
+        onError(result.error ? webSpeechErrorMessage(result.error) : 'आपकी आवाज़ समझ में नहीं आई।');
+      }
+      onEnd();
+    });
+  }
+
+  public stopDirectListening(): void {
+    if (this.webSpeechActive) {
+      this.webSpeechActive = false;
+      webSpeechAsrService.abort();
+    }
   }
 
   /**
@@ -189,6 +241,12 @@ export class SpeechService {
 
     console.warn('[SpeechService] Local and cloud ASR failed; retrying with the browser recogniser');
     announceAsrFallback(lang);
+
+    // Ensure the MediaRecorder/AudioContext mic track is fully released by the OS
+    // before the browser's speech recogniser tries to open it. Without this pause,
+    // Chrome reports a 'network' error because it can't claim the mic in time.
+    audioCaptureService.stopCapture();
+    await new Promise(resolve => setTimeout(resolve, 600));
 
     this.webSpeechActive = true;
     this.audioCaptureActive = true;
@@ -390,6 +448,11 @@ export class SpeechService {
       }
     }
 
+    const webSpeechOk = await this.tryWebSpeechTTS(text, lang, onStart, onEnd);
+    if (webSpeechOk) {
+      return;
+    }
+
     console.warn('[SpeechService] No TTS backend available');
     // Every speaker button in the app funnels through speak(), so announce the
     // failure once here instead of leaving each button silently dead.
@@ -503,6 +566,55 @@ export class SpeechService {
       console.warn('[SpeechService] Local TTS (Piper) error:', err.message);
       return false;
     }
+  }
+
+  private async tryWebSpeechTTS(
+    text: string,
+    lang: LanguageCode,
+    onStart?: () => void,
+    onEnd?: () => void
+  ): Promise<boolean> {
+    if (typeof window === 'undefined' || !window.speechSynthesis) return false;
+
+    window.speechSynthesis.cancel(); // Clear any pending/stuck speech
+
+    return new Promise((resolve) => {
+      const utterance = new SpeechSynthesisUtterance(text);
+      
+      let bcp47 = 'hi-IN';
+      if (lang === 'ta-IN') bcp47 = 'ta-IN';
+      else if (lang === 'te-IN') bcp47 = 'te-IN';
+      else if (lang === 'mr-IN') bcp47 = 'mr-IN';
+      else if (lang === 'bn-IN') bcp47 = 'bn-IN';
+      else bcp47 = 'hi-IN';
+
+      utterance.lang = bcp47;
+      utterance.pitch = 1.0;
+      utterance.rate = 0.9;
+
+      // Pick best Indic voice if available (mimicking main branch behavior)
+      const voices = window.speechSynthesis.getVoices();
+      const indicVoice = voices.find(v => v.lang.startsWith(bcp47.split('-')[0]) || v.lang.includes('hi'));
+      if (indicVoice) {
+        utterance.voice = indicVoice;
+      }
+
+      utterance.onstart = () => {
+        if (onStart) onStart();
+      };
+
+      utterance.onend = () => {
+        if (onEnd) onEnd();
+        resolve(true);
+      };
+
+      utterance.onerror = (e) => {
+        console.warn('[SpeechService] WebSpeech TTS error:', e);
+        resolve(false);
+      };
+
+      window.speechSynthesis.speak(utterance);
+    });
   }
 
   private async runPiperInference(
@@ -724,6 +836,9 @@ export class SpeechService {
   }
 
   public stopSpeaking(): void {
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
     if (this.currentSource) {
       try {
         this.currentSource.stop();

@@ -133,7 +133,9 @@ export class WebSpeechAsrService {
     callbacks: WebSpeechAsrCallbacks = {}
   ): Promise<WebSpeechAsrResult> {
     const Ctor = getRecognitionCtor();
+    console.log('[WebSpeechASR] recognize() called. lang=', lang, '| SpeechRecognition supported=', !!Ctor);
     if (!Ctor) {
+      console.error('[WebSpeechASR] SpeechRecognition not available in this browser!');
       return Promise.resolve({ success: false, transcript: '', error: 'unsupported' });
     }
 
@@ -143,7 +145,9 @@ export class WebSpeechAsrService {
       let recognition: SpeechRecognitionLike;
       try {
         recognition = new Ctor();
+        console.log('[WebSpeechASR] SpeechRecognition instance created successfully');
       } catch (err: any) {
+        console.error('[WebSpeechASR] Failed to construct SpeechRecognition:', err);
         resolve({ success: false, transcript: '', error: err?.message || 'construct-failed' });
         return;
       }
@@ -156,23 +160,29 @@ export class WebSpeechAsrService {
       };
       this.pending = state;
 
-      recognition.lang = toWebSpeechLang(lang);
-      // One utterance per pass. The app asks the user to repeat once, not to
-      // hold a conversation, so a continuous session would only stall onend.
+      const bcp47 = toWebSpeechLang(lang);
+      recognition.lang = bcp47;
       recognition.continuous = false;
-      // Only final results are emitted: GrievanceReporter appends every
-      // onResult straight into its textarea and would duplicate partials.
       recognition.interimResults = false;
       recognition.maxAlternatives = 1;
+      console.log('[WebSpeechASR] Configured: lang=', bcp47, '| continuous=false | interimResults=false');
 
-      recognition.onspeechstart = () => callbacks.onSpeechStart?.();
+      recognition.onspeechstart = () => {
+        console.log('[WebSpeechASR] onspeechstart fired — microphone is picking up speech!');
+        callbacks.onSpeechStart?.();
+      };
 
       recognition.onresult = (event) => {
+        console.log('[WebSpeechASR] onresult fired! resultIndex=', event.resultIndex, 'total results=', event.results.length);
         for (let i = event.resultIndex; i < event.results.length; i++) {
           const result = event.results[i];
-          if (!result || !result.isFinal) continue;
+          if (!result || !result.isFinal) {
+            console.log('[WebSpeechASR] result[', i, '] is interim, skipping');
+            continue;
+          }
           const alternative = result[0];
           if (!alternative) continue;
+          console.log('[WebSpeechASR] FINAL transcript received:', alternative.transcript, '| confidence:', alternative.confidence);
           state.transcript = `${state.transcript} ${alternative.transcript}`.trim();
           if (typeof alternative.confidence === 'number' && alternative.confidence > 0) {
             state.confidence = alternative.confidence;
@@ -181,19 +191,20 @@ export class WebSpeechAsrService {
       };
 
       recognition.onerror = (event) => {
+        console.error('[WebSpeechASR] onerror fired! error code=', event?.error);
         state.errorCode = event?.error || 'unknown';
       };
 
-      // onend always follows a result, an error or a manual stop, so it is the
-      // single place the promise is settled.
-      recognition.onend = () => this.settle();
+      recognition.onend = () => {
+        console.log('[WebSpeechASR] onend fired. Final transcript=', state.transcript, '| errorCode=', state.errorCode);
+        this.settle();
+      };
 
       this.recognition = recognition;
 
       this.timer = setTimeout(() => {
         if (this.pending === state && this.recognition) {
-          // Record the reason before aborting: some engines emit an
-          // `aborted` error from the teardown and would otherwise mask it.
+          console.warn('[WebSpeechASR] Timeout hit (12s) — no speech detected. Aborting.');
           state.errorCode = 'no-speech';
           try {
             this.recognition.abort();
@@ -204,7 +215,9 @@ export class WebSpeechAsrService {
 
       try {
         recognition.start();
+        console.log('[WebSpeechASR] recognition.start() called — listening now...');
       } catch (err: any) {
+        console.error('[WebSpeechASR] recognition.start() threw an error:', err);
         state.errorCode = err?.message || 'start-failed';
         this.settle();
       }

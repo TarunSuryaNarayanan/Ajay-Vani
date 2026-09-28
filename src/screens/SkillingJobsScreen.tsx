@@ -5,6 +5,7 @@ import { speechService } from '../services/speech';
 import { CenterMap } from '../components/Map/CenterMap';
 import { DISTRICT_MARKET_REGISTRY } from '../../server/data/districtJobs';
 import { SkillingCenter } from '../types';
+import { QrTokenCard } from '../components/Governance/QrTokenCard';
 
 interface CentreProvenance {
   fetchedAt: string;
@@ -439,8 +440,13 @@ export const SkillingJobsScreen: React.FC = () => {
         )}
       </div>
 
+      {/* QR Enrolment Token */}
+      <div className="mt-6">
+        <QrTokenCard />
+      </div>
+
       {/* Single Clear Action CTA per design.md §1 & §5 */}
-      <div className="mt-6 pt-4 border-t border-line">
+      <div className="mt-4 pt-4 border-t border-line">
         <button
           onClick={handleEnrollToCourse}
           className="btn-primary w-full"
