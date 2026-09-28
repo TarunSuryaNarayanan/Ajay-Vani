@@ -47,15 +47,24 @@ describe('matchDistrict', () => {
   });
 });
 
-describe('searchGovernmentCentres with no snapshot loaded', () => {
-  it('reports not-found rather than inventing a result', () => {
+describe('searchGovernmentCentres against the loaded snapshot', () => {
+  // The snapshot is committed (Karnataka CMKKY training centres). The invariant
+  // this guards is unchanged: a district with no records must report
+  // found=false with an empty list, never a fabricated centre.
+  it('reports not-found for a district with no records', () => {
     const result = searchGovernmentCentres('Varanasi');
-    // Before `npm run data:fetch` has run there is no snapshot at all.
-    // A null snapshot must never be reported as a successful empty search.
     expect(result.found).toBe(false);
     expect(result.centres).toEqual([]);
-    expect(getSnapshot()).toBeNull();
-    expect(getSnapshotProvenance()).toBeNull();
+    // The snapshot itself is present — provenance is real, not invented.
+    expect(getSnapshot()).not.toBeNull();
+    expect(getSnapshotProvenance()).not.toBeNull();
+  });
+
+  it('returns real records for a district that exists in the snapshot', () => {
+    const result = searchGovernmentCentres('Udupi');
+    expect(result.found).toBe(true);
+    expect(result.centres.length).toBeGreaterThan(0);
+    expect(result.centres[0].district.toLowerCase()).toContain('udupi');
   });
 });
 

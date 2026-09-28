@@ -20,6 +20,7 @@ const VOICE_CHAT_KEYS = [
   'noAudioDetected',
   'replayAudio',
   'tapToSpeak',
+  'voiceRetryPrompt',
 ];
 
 describe('voice-chat localization coverage', () => {

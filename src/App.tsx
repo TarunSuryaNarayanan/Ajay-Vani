@@ -4,6 +4,7 @@ import { MobileContainer } from './components/Layout/MobileContainer';
 import { Header } from './components/Layout/Header';
 import { OfflineBanner } from './components/Layout/OfflineBanner';
 import { TtsUnavailableToast } from './components/Layout/TtsUnavailableToast';
+import { AsrRetryToast } from './components/Layout/AsrRetryToast';
 import { LanguageSelectionScreen } from './screens/LanguageSelectionScreen';
 import { VoiceChatScreen } from './screens/VoiceChatScreen';
 import { NSQFProfileScreen } from './screens/NSQFProfileScreen';
@@ -61,6 +62,9 @@ const AppContent: React.FC = () => {
 
       {/* Every speaker button reports itself here when no voice backend exists */}
       <TtsUnavailableToast />
+
+      {/* Asks the beneficiary to repeat when the browser recogniser takes over */}
+      <AsrRetryToast />
 
       {/* Complaints · training lifecycle · QR token, opened from the header */}
       <ServicesPanelHost />

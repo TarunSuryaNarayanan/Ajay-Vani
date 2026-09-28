@@ -1,6 +1,7 @@
 // Canonical shapes for the government training-centre snapshot.
 
 export interface GovCentre {
+  centreId?: string;
   centreName: string;
   scheme: string;
   trade?: string;

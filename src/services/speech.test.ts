@@ -6,7 +6,8 @@
 vi.mock('onnxruntime-web', () => ({}));
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { speechService, TTS_UNAVAILABLE_EVENT } from './speech';
+import { speechService, TTS_UNAVAILABLE_EVENT, ASR_FALLBACK_EVENT } from './speech';
+import { webSpeechAsrService } from './webSpeechAsr';
 
 describe('toBhashiniLang (via SpeechService)', () => {
   const cases: Array<[string, string]> = [
@@ -35,6 +36,163 @@ describe('empty transcript contract (D18)', () => {
     const result = await (speechService as any).recognizeWithFallback('', 'hi-IN');
     expect(result.success).toBe(false);
     expect(result.transcript).toBe('');
+  });
+});
+
+describe('Web Speech API fallback', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    (speechService as any).webSpeechActive = false;
+  });
+
+  /**
+   * jsdom ships no recogniser, so the retry is inert unless the constructor is
+   * stubbed. That is also the guard the last two tests below rely on.
+   */
+  function withBrowserRecognizer() {
+    vi.stubGlobal('SpeechRecognition', vi.fn());
+  }
+
+  /** Both blob engines fail, which is the only way the retry may run. */
+  function stubBlobEnginesAsFailed() {
+    vi.spyOn((speechService as any), 'tryOnnxASR')
+      .mockResolvedValue({ success: false, transcript: '', source: 'onnx' });
+    vi.spyOn((speechService as any), 'tryBhashiniASR')
+      .mockResolvedValue({ success: false, transcript: '', source: 'bhashini' });
+  }
+
+  function stubBrowserRecognizer(result: any) {
+    return vi.spyOn(webSpeechAsrService, 'recognize').mockResolvedValue(result);
+  }
+
+  it('is advertised only when the browser actually has a recogniser', () => {
+    expect(speechService.isWebSpeechSupported()).toBe(false);
+    vi.stubGlobal('webkitSpeechRecognition', vi.fn());
+    expect(speechService.isWebSpeechSupported()).toBe(true);
+  });
+
+  it('does not touch the browser recogniser when local ASR succeeds', async () => {
+    stubBlobEnginesAsFailed();
+    vi.spyOn((speechService as any), 'tryOnnxASR')
+      .mockResolvedValue({ success: true, transcript: 'सोलर', source: 'onnx' });
+    const browser = stubBrowserRecognizer({ success: false, transcript: '', error: 'unsupported' });
+
+    const result = await (speechService as any).recognizeOrRetryWithWebSpeech('d2F2', 'hi-IN');
+
+    expect(result).toMatchObject({ success: true, transcript: 'सोलर', source: 'onnx' });
+    expect(browser).not.toHaveBeenCalled();
+  });
+
+  it('does not touch the browser recogniser when Bhashini succeeds', async () => {
+    vi.spyOn((speechService as any), 'tryBhashiniASR')
+      .mockResolvedValue({ success: true, transcript: 'पंखा', source: 'bhashini' });
+    const browser = stubBrowserRecognizer({ success: false, transcript: '', error: 'unsupported' });
+
+    const result = await (speechService as any).recognizeOrRetryWithWebSpeech('d2F2', 'hi-IN');
+
+    expect(result).toMatchObject({ success: true, source: 'bhashini' });
+    expect(browser).not.toHaveBeenCalled();
+  });
+
+  it('retries with the browser recogniser once every blob engine has failed', async () => {
+    stubBlobEnginesAsFailed();
+    withBrowserRecognizer();
+    const browser = stubBrowserRecognizer({
+      success: true,
+      transcript: 'मैं सीता हूँ',
+      confidence: 0.7,
+    });
+
+    const result = await (speechService as any).recognizeOrRetryWithWebSpeech('d2F2', 'hi-IN');
+
+    expect(browser).toHaveBeenCalledWith('hi-IN', { onSpeechStart: undefined });
+    expect(result).toEqual({
+      success: true,
+      transcript: 'मैं सीता हूँ',
+      confidence: 0.7,
+      source: 'webspeech',
+    });
+  });
+
+  it('forwards onSpeechStart so the screen shows the retry as listening', async () => {
+    stubBlobEnginesAsFailed();
+    withBrowserRecognizer();
+    const onSpeechStart = vi.fn();
+    const browser = stubBrowserRecognizer({ success: true, transcript: 'ठीक है', confidence: 0.6 });
+
+    await (speechService as any).recognizeOrRetryWithWebSpeech('d2F2', 'ta-IN', onSpeechStart);
+
+    expect(browser).toHaveBeenCalledWith('ta-IN', { onSpeechStart });
+  });
+
+  it('announces the retry so the UI can ask the user to repeat', async () => {
+    stubBlobEnginesAsFailed();
+    withBrowserRecognizer();
+    stubBrowserRecognizer({ success: true, transcript: 'ठीक', confidence: 0.6 });
+
+    const seen: any[] = [];
+    const listener = (e: Event) => seen.push((e as CustomEvent).detail);
+    window.addEventListener(ASR_FALLBACK_EVENT, listener);
+
+    await (speechService as any).recognizeOrRetryWithWebSpeech('d2F2', 'bn-IN');
+
+    expect(seen).toEqual([{ lang: 'bn-IN' }]);
+    window.removeEventListener(ASR_FALLBACK_EVENT, listener);
+  });
+
+  it('keeps the original failure when the browser has no recogniser', async () => {
+    stubBlobEnginesAsFailed();
+    const browser = stubBrowserRecognizer({ success: true, transcript: 'नहीं चलेगा' });
+
+    const result = await (speechService as any).recognizeOrRetryWithWebSpeech('d2F2', 'hi-IN');
+
+    expect(browser).not.toHaveBeenCalled();
+    expect(result).toEqual({ success: false, transcript: '', source: 'fallback' });
+  });
+
+  it('surfaces the browser error instead of the generic message', async () => {
+    stubBlobEnginesAsFailed();
+    withBrowserRecognizer();
+    stubBrowserRecognizer({ success: false, transcript: '', error: 'not-allowed' });
+
+    const result = await (speechService as any).recognizeOrRetryWithWebSpeech('d2F2', 'hi-IN');
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/अनुमति नहीं दी/);
+  });
+
+  it('falls back to the generic message when the retry yields nothing', async () => {
+    stubBlobEnginesAsFailed();
+    withBrowserRecognizer();
+    stubBrowserRecognizer({ success: false, transcript: '', error: 'no-speech' });
+
+    const result = await (speechService as any).recognizeOrRetryWithWebSpeech('d2F2', 'hi-IN');
+
+    expect(result).toMatchObject({ success: false, transcript: '', source: 'fallback' });
+  });
+
+  it('clears the retry flag even when the recogniser throws', async () => {
+    stubBlobEnginesAsFailed();
+    withBrowserRecognizer();
+    vi.spyOn(webSpeechAsrService, 'recognize').mockRejectedValue(new Error('boom'));
+
+    await expect(
+      (speechService as any).recognizeOrRetryWithWebSpeech('d2F2', 'hi-IN')
+    ).rejects.toThrow('boom');
+    expect((speechService as any).webSpeechActive).toBe(false);
+  });
+
+  it('stopListening() only halts the recogniser while a retry is in flight', async () => {
+    (speechService as any).webSpeechActive = true;
+    const stop = vi.spyOn(webSpeechAsrService, 'stop')
+      .mockResolvedValue({ success: false, transcript: '' });
+    const captureStop = vi.spyOn((speechService as any), 'recognizeOrRetryWithWebSpeech');
+
+    await speechService.stopListening();
+
+    expect(stop).toHaveBeenCalledOnce();
+    expect(captureStop).not.toHaveBeenCalled();
   });
 });
 

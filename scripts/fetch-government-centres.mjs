@@ -27,7 +27,10 @@ import { normaliseRow } from '../server/data/centres/normalise.ts';
 dotenv.config();
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const CONFIG_PATH = path.join(ROOT, 'scripts', 'government-datasets.config.json');
+const CONFIG_PATH =
+  process.argv.includes('--config')
+    ? path.resolve(ROOT, process.argv[process.argv.indexOf('--config') + 1])
+    : path.join(ROOT, 'scripts', 'government-datasets.config.json');
 const SNAPSHOT_JSON = path.join(ROOT, 'server', 'data', 'centres', 'govCentresSnapshot.json');
 const SNAPSHOT_TS = path.join(ROOT, 'server', 'data', 'centres', 'govCentres.generated.ts');
 
@@ -91,6 +94,24 @@ function parseCsv(text) {
   );
 }
 
+/**
+ * Read a local CSV/JSON file and return raw row objects.
+ * Used by `npm run data:fetch:local` for offline snapshots that were
+ * downloaded manually (e.g. when the data.gov.in API tab is unreachable).
+ */
+async function fetchLocalFile(filePath) {
+  const text = await readFile(filePath, 'utf8');
+  const ext = path.extname(filePath).toLowerCase();
+  if (ext === '.json') {
+    const parsed = JSON.parse(text);
+    if (Array.isArray(parsed)) return parsed;
+    if (parsed && Array.isArray(parsed.records)) return parsed.records;
+    if (parsed && Array.isArray(parsed.rows)) return parsed.rows;
+    throw new Error('local JSON is not an array or {records:[...]} shape');
+  }
+  return parseCsv(text);
+}
+
 async function fetchAllRecords(resourceUuid, apiKey, apiBase) {
   const records = [];
   let offset = 0;
@@ -147,22 +168,69 @@ async function fetchAllRecords(resourceUuid, apiKey, apiBase) {
 
 async function main() {
   const apiKey = process.env[process.env.OGD_KEY_VAR || 'OGD_API_KEY'];
-  if (!apiKey) {
-    fail(
-      'OGD_API_KEY is not set.\n' +
-        '  data.gov.in requires a free API key for every dataset.\n' +
-        '  Register at https://www.data.gov.in/ , copy your key, then run:\n' +
-        '      OGD_API_KEY=<key> npm run data:fetch'
-    );
-  }
+  const useLocal = process.argv.includes('--local');
+  const discoverUuid = (() => {
+    const i = process.argv.indexOf('--discover');
+    return i >= 0 ? process.argv[i + 1] : null;
+  })();
 
   const config = JSON.parse(await readFile(CONFIG_PATH, 'utf8'));
+
+  // --discover <uuid>: fetch one page and print the real field names so the
+  // fieldMap in the config can be validated before a fetch is attempted. This
+  // is the only mode that works without a configured dataset entry.
+  if (discoverUuid) {
+    if (!apiKey) {
+      fail(
+        '--discover still needs an OGD_API_KEY: the /resource endpoint refuses ' +
+          'requests without one ("Authorization field missing").'
+      );
+    }
+    const apiBase = config._apiBase || 'https://api.data.gov.in';
+    const url =
+      `${apiBase}/resource/${discoverUuid}` +
+      `?api-key=${encodeURIComponent(apiKey)}&format=json&limit=5`;
+    let body;
+    try {
+      const res = await fetch(url, { headers: { Accept: 'application/json' } });
+      body = await res.text();
+      if (!res.ok) throw new Error(`HTTP ${res.status}: ${body.slice(0, 200)}`);
+    } catch (err) {
+      fail(`discover ${discoverUuid}: ${err.message}`);
+    }
+    let payload;
+    try {
+      payload = JSON.parse(body);
+    } catch {
+      fail(`discover ${discoverUuid}: response was not JSON: ${body.slice(0, 120)}`);
+    }
+    if (payload.error) fail(`discover ${discoverUuid}: API error: ${payload.error}`);
+    const records = Array.isArray(payload.records) ? payload.records : [];
+    console.log(`\n[data:fetch] discover ${discoverUuid}`);
+    console.log(`  title   : ${payload.title || '(none)'}`);
+    console.log(`  updated : ${payload.updated_date || payload.updated || '(none)'}`);
+    console.log(`  total   : ${typeof payload.total === 'number' ? payload.total : '(unknown)'}`);
+    console.log(`  fields  : ${(Array.isArray(payload.fields) ? payload.fields : []).map((f) => f.id || f.name).join(', ') || '(no field metadata)'}`);
+    if (records.length) {
+      console.log(`  sample row keys: ${Object.keys(records[0]).join(', ')}`);
+      console.log(`  sample row: ${JSON.stringify(records[0]).slice(0, 400)}`);
+    } else {
+      console.log('  (no records returned — the UUID may be wrong or the key lacks access)');
+    }
+    console.log();
+    return;
+  }
+
   const apiBase = config._apiBase || 'https://api.data.gov.in';
 
-  const configured = (config.datasets || []).filter((d) => (d.resourceUuid || '').trim());
-  const missing = (config.datasets || []).filter((d) => !(d.resourceUuid || '').trim());
+  const configured = (config.datasets || []).filter(
+    (d) => (d.resourceUuid || '').trim() || (d.localFile || '').trim()
+  );
+  const missing = (config.datasets || []).filter(
+    (d) => !(d.resourceUuid || '').trim() && !(d.localFile || '').trim()
+  );
 
-  if (!configured.length) {
+  if (!useLocal && !configured.length) {
     fail(
       'No dataset in scripts/government-datasets.config.json has a resourceUuid.\n' +
         `  ${missing.length} dataset(s) are configured but unverified. Open the dataset page on\n` +
@@ -172,25 +240,60 @@ async function main() {
     );
   }
 
+  if (useLocal && !apiKey) {
+    // Local mode still wants the key present so the same script path is used,
+    // but it does not need to hit the network. Accept the key-less local run.
+    process.stdout.write('[data:fetch] --local mode: reading CSVs from disk, no network calls.\n');
+  } else if (!apiKey) {
+    fail(
+      'OGD_API_KEY is not set.\n' +
+        '  data.gov.in requires a free API key for every dataset.\n' +
+        '  Register at https://www.data.gov.in/ , copy your key, then run:\n' +
+        '      OGD_API_KEY=<key> npm run data:fetch'
+    );
+  }
+
   const allRecords = [];
   const usedDatasets = [];
   let lastUpdated = null;
 
   for (const dataset of configured) {
     process.stdout.write(`[data:fetch] ${dataset.name} — ${dataset.title}\n`);
-    let result;
-    try {
-      result = await fetchAllRecords(dataset.resourceUuid, apiKey, apiBase);
-    } catch (err) {
-      fail(`${dataset.name}: ${err.message}`);
+
+    let rows;
+    if (useLocal) {
+      const localPath = dataset.localFile
+        ? path.resolve(ROOT, dataset.localFile)
+        : null;
+      if (!localPath || !existsSync(localPath)) {
+        fail(
+          `${dataset.name}: --local mode but no localFile for this dataset ` +
+            `(looked for ${localPath || 'no path set'}).`
+        );
+      }
+      try {
+        rows = await fetchLocalFile(localPath);
+      } catch (err) {
+        fail(`${dataset.name}: could not read local file ${localPath}: ${err.message}`);
+      }
+      if (!lastUpdated) lastUpdated = dataset.lastUpdated || null;
+    } else {
+      let result;
+      try {
+        result = await fetchAllRecords(dataset.resourceUuid, apiKey, apiBase);
+      } catch (err) {
+        fail(`${dataset.name}: ${err.message}`);
+      }
+      rows = result.records;
+      if (!lastUpdated && result.lastUpdated) lastUpdated = result.lastUpdated;
     }
 
     const stateFilter = (dataset.stateFilter || []).map((s) => s.toLowerCase());
     const districtFilter = (dataset.districtFilter || []).map((d) => d.toLowerCase());
 
     let kept = 0;
-    for (const row of result.records) {
-      const centre = normaliseRow(row, dataset.fieldMap, dataset.title, dataset.resourceUuid);
+    for (const row of rows) {
+      const centre = normaliseRow(row, dataset.fieldMap, dataset.title, dataset.resourceUuid || `local:${dataset.name}`);
       if (!centre) continue;
       if (stateFilter.length && !stateFilter.includes(centre.state.toLowerCase())) continue;
       if (districtFilter.length && !districtFilter.includes(centre.district.toLowerCase())) continue;
@@ -198,8 +301,11 @@ async function main() {
       kept += 1;
     }
 
-    usedDatasets.push({ name: dataset.name, resourceId: dataset.resourceUuid, records: kept });
-    if (!lastUpdated && result.lastUpdated) lastUpdated = result.lastUpdated;
+    usedDatasets.push({
+      name: dataset.name,
+      resourceId: dataset.resourceUuid || `local:${dataset.localFile || dataset.name}`,
+      records: kept,
+    });
     process.stdout.write(`           ${kept} usable record(s) after district/state filter\n`);
   }
 

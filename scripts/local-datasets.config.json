@@ -1,0 +1,31 @@
+{
+  "_comment": "Local-only dataset config for `npm run data:fetch:local`. Each entry uses `localFile` (repo-relative path) instead of `resourceUuid`, so a manually-downloaded centre listing can be loaded without the data.gov.in API key. The same normaliser, district/state filters and snapshot writer apply as the network path.",
+  "_apiBase": "https://api.data.gov.in",
+  "_keyEnvVar": "OGD_API_KEY",
+  "datasets": [
+    {
+      "name": "karnataka_cmkky_training_centres",
+      "resourceUuid": "",
+      "localFile": "data/karnataka-training-centres.csv",
+      "title": "Training Center details under CMKKY (Chamarajanagar Kaushalya Karnataka Yojana)",
+      "publisher": "Karnataka Skill Development Corporation (KSDC)",
+      "lastUpdated": "2025-07-24",
+      "stateFilter": [],
+      "fieldMap": {
+        "centreId": ["centre_id", "vtp_no", "vtp"],
+        "centreName": ["centre_name", "training_centre", "centre", "name"],
+        "scheme": ["scheme", "type"],
+        "state": ["state"],
+        "district": ["district"],
+        "address": ["address", "location"],
+        "pincode": ["pincode", "postal_code"],
+        "latitude": ["latitude", "lat"],
+        "longitude": ["longitude", "lon", "lng"],
+        "coordinatorName": ["coordinator_name", "contact_person", "incharge"],
+        "phone": ["phone", "mobile", "contact_no"],
+        "email": ["email"],
+        "lastUpdated": ["last_updated", "updated"]
+      }
+    }
+  ]
+}

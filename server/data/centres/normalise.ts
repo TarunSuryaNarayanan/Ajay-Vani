@@ -4,6 +4,7 @@
 // or null when the row is unusable (no centre name, no district).
 
 export interface FieldMap {
+  centreId: string[];
   centreName: string[];
   scheme: string[];
   trade: string[];
@@ -24,6 +25,7 @@ export interface RawRow {
 }
 
 export interface GovCentre {
+  centreId?: string;
   centreName: string;
   scheme: string;
   trade?: string;
@@ -111,6 +113,23 @@ export function normaliseRow(
   const district = cleanDistrict(pick(row, fieldMap.district));
   if (!centreName || !district) return null;
 
+  // Deterministic id derived from the source row so the same snapshot row
+  // always maps to the same centreId across reloads. Never invented from
+  // nothing — if the source carries an explicit id column we use it.
+  const explicitId = pick(row, fieldMap.centreId);
+  const stableKey = [
+    sourceResourceId,
+    sourceDataset,
+    centreName,
+    district,
+    pick(row, fieldMap.phone) || '',
+  ].join('|');
+  let hash = 0;
+  for (let i = 0; i < stableKey.length; i++) {
+    hash = (hash * 31 + stableKey.charCodeAt(i)) >>> 0;
+  }
+  const centreId = explicitId || `gov-${hash.toString(36)}`;
+
   const latitude = toNumber(pick(row, fieldMap.latitude) as unknown);
   const longitude = toNumber(pick(row, fieldMap.longitude) as unknown);
   // Guard against obviously invalid lat/long so we never render 0,0 as a real centre.
@@ -118,6 +137,7 @@ export function normaliseRow(
   const validLon = longitude !== undefined && Math.abs(longitude) <= 180 ? longitude : undefined;
 
   return {
+    centreId,
     centreName,
     scheme: normaliseScheme(pick(row, fieldMap.scheme)),
     trade: pick(row, fieldMap.trade),

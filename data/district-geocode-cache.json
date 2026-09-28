@@ -1,0 +1,182 @@
+{
+  "BAGALAKOTE": {
+    "display_name": "Bagalakote taluk Karnataka India",
+    "lat": 16.2051553,
+    "lon": 75.6994696,
+    "via": "photon"
+  },
+  "BALLARI": {
+    "display_name": "Ballari Karnataka India",
+    "lat": 15.3483166,
+    "lon": 76.8054883,
+    "via": "photon"
+  },
+  "BELAGAVI": {
+    "display_name": "Belagavi Karnataka India",
+    "lat": 16.1587846,
+    "lon": 74.888862,
+    "via": "photon"
+  },
+  "BENGALURU RURAL": {
+    "display_name": "Bengaluru North Karnataka India",
+    "lat": 13.1826245,
+    "lon": 77.3395681,
+    "via": "photon"
+  },
+  "BIDAR": {
+    "display_name": "Bidar Karnataka India",
+    "lat": 18.0207297,
+    "lon": 77.2487204,
+    "via": "photon"
+  },
+  "CHAMARAJANAGARA": {
+    "display_name": "Chamarajanagara Karnataka India",
+    "lat": 11.9238058,
+    "lon": 76.9393558,
+    "via": "photon"
+  },
+  "CHIKBALLAPUR": {
+    "display_name": "Chikballapur Karnataka India",
+    "lat": 13.4274222,
+    "lon": 77.7323072,
+    "via": "photon"
+  },
+  "CHIKMAGALURU": {
+    "display_name": "Chikkamagaluru Karnataka India",
+    "lat": 13.318014,
+    "lon": 75.7738743,
+    "via": "photon"
+  },
+  "CHITRADURGA": {
+    "display_name": "Chitradurga Karnataka India",
+    "lat": 14.3049174,
+    "lon": 76.5296667,
+    "via": "photon"
+  },
+  "DAKSHINA KANNADA": {
+    "display_name": "Dakshina Kannada Karnataka India",
+    "lat": 12.8226434,
+    "lon": 75.2265036,
+    "via": "photon"
+  },
+  "DAVANGERE": {
+    "display_name": "Davangere Water Supply Reservoir Karnataka India",
+    "lat": 14.4331009,
+    "lon": 75.9302826,
+    "via": "photon"
+  },
+  "DHARWAD": {
+    "display_name": "Dharwad Karnataka India",
+    "lat": 15.3707296,
+    "lon": 75.1332867,
+    "via": "photon"
+  },
+  "GADAG": {
+    "display_name": "Gadag Karnataka India",
+    "lat": 15.416692,
+    "lon": 75.6815801,
+    "via": "photon"
+  },
+  "HASSAN": {
+    "display_name": "Hassan Karnataka India",
+    "lat": 13.0301852,
+    "lon": 76.1744968,
+    "via": "photon"
+  },
+  "HAVERI": {
+    "display_name": "Haveri Karnataka India",
+    "lat": 14.7180268,
+    "lon": 75.3656423,
+    "via": "photon"
+  },
+  "KALABURGI": {
+    "display_name": "Raichur - Kalaburgi Road Karnataka India",
+    "lat": 16.7609462,
+    "lon": 77.2369527,
+    "via": "photon"
+  },
+  "KANNADA": {
+    "display_name": "Dakshina Kannada Karnataka India",
+    "lat": 12.8226434,
+    "lon": 75.2265036,
+    "via": "photon"
+  },
+  "KODAGU": {
+    "display_name": "Kodagu Karnataka India",
+    "lat": 12.3827332,
+    "lon": 75.6640715,
+    "via": "photon"
+  },
+  "KOLAR": {
+    "display_name": "Kolar Karnataka India",
+    "lat": 13.1805066,
+    "lon": 78.2669329,
+    "via": "photon"
+  },
+  "KOPPAL": {
+    "display_name": "Koppal Karnataka India",
+    "lat": 15.5748238,
+    "lon": 76.3118494,
+    "via": "photon"
+  },
+  "MANDYA": {
+    "display_name": "Mandya Karnataka India",
+    "lat": 12.6368939,
+    "lon": 76.7275477,
+    "via": "photon"
+  },
+  "MYSURU": {
+    "display_name": "Mysuru Karnataka India",
+    "lat": 12.3051828,
+    "lon": 76.6553609,
+    "via": "photon"
+  },
+  "RAICHURU": {
+    "display_name": "Raichur Karnataka India",
+    "lat": 16.083333,
+    "lon": 77.166667,
+    "via": "photon"
+  },
+  "RAMANAGARA": {
+    "display_name": "Ramanagara Karnataka India",
+    "lat": 12.7252766,
+    "lon": 77.2804797,
+    "via": "photon"
+  },
+  "SHIVAMOGA": {
+    "display_name": "Shivamogga Karnataka India",
+    "lat": 13.9326093,
+    "lon": 75.574978,
+    "via": "photon"
+  },
+  "TUMKURU": {
+    "display_name": "Tumakuru Karnataka India",
+    "lat": 13.3400771,
+    "lon": 77.1006208,
+    "via": "photon"
+  },
+  "UDUPI": {
+    "display_name": "Udupi Karnataka India",
+    "lat": 13.5269784,
+    "lon": 74.8731879,
+    "via": "photon"
+  },
+  "URBAN": {
+    "display_name": "Bengaluru Urban Karnataka India",
+    "lat": 12.9461554,
+    "lon": 77.5503844,
+    "via": "photon"
+  },
+  "VIJAYAPURA": {
+    "display_name": "Vijayapura Karnataka India",
+    "lat": 16.8269911,
+    "lon": 75.7175387,
+    "via": "photon"
+  },
+  "YADGIR": {
+    "display_name": "Yadgir Karnataka India",
+    "lat": 16.5744123,
+    "lon": 76.9254434,
+    "via": "photon"
+  }
+}
