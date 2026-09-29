@@ -52,6 +52,7 @@ export const AadhaarLoginScreen: React.FC = () => {
     }
 
     setIsListeningVoice(true);
+    const initialInput = aadhaarInput;
     speechService.recognizeDirectly(
       selectedLanguage || 'hi-IN',
       (transcript, isFinal) => {
@@ -118,10 +119,7 @@ export const AadhaarLoginScreen: React.FC = () => {
         
         const digits = parsed.replace(/\D/g, '');
         if (digits) {
-          setAadhaarInput(prev => {
-            const next = prev + digits;
-            return next.slice(0, 12);
-          });
+          setAadhaarInput((initialInput + digits).slice(0, 12));
         }
       },
       (error) => {
@@ -129,7 +127,8 @@ export const AadhaarLoginScreen: React.FC = () => {
       },
       () => {
         setIsListeningVoice(false);
-      }
+      },
+      true // Pass continuous = true so the mic stays open until stopped
     );
   };
 

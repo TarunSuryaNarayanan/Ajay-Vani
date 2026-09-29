@@ -62,6 +62,8 @@ export interface WebSpeechAsrResult {
 
 export interface WebSpeechAsrCallbacks {
   onSpeechStart?: () => void;
+  onInterimResult?: (transcript: string) => void;
+  continuous?: boolean;
 }
 
 /** No speech within this window is treated as "user did not repeat themselves". */
@@ -113,6 +115,7 @@ export class WebSpeechAsrService {
     errorCode: string | null;
   } | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
+  private stopped: boolean = false;
 
   /** True in Chrome, Edge and Safari; false in Firefox and most other engines. */
   public isSupported(): boolean {
@@ -139,6 +142,7 @@ export class WebSpeechAsrService {
       return Promise.resolve({ success: false, transcript: '', error: 'unsupported' });
     }
 
+    this.stopped = false;
     this.abort();
 
     return new Promise<WebSpeechAsrResult>((resolve) => {
@@ -162,42 +166,76 @@ export class WebSpeechAsrService {
 
       const bcp47 = toWebSpeechLang(lang);
       recognition.lang = bcp47;
-      recognition.continuous = false;
-      recognition.interimResults = false;
+      recognition.continuous = callbacks.continuous || false;
+      recognition.interimResults = true;
       recognition.maxAlternatives = 1;
-      console.log('[WebSpeechASR] Configured: lang=', bcp47, '| continuous=false | interimResults=false');
+      console.log('[WebSpeechASR] Configured: lang=', bcp47, '| continuous=', recognition.continuous, '| interimResults=true');
+
+      const resetSilenceTimer = () => {
+        if (!recognition.continuous) return;
+        if (this.timer) clearTimeout(this.timer);
+        this.timer = setTimeout(() => {
+          console.log('[WebSpeechASR] 8s silence detected, auto-submitting continuous stream.');
+          try { recognition.abort(); } catch(e) {}
+          this.settle();
+        }, 8000);
+      };
 
       recognition.onspeechstart = () => {
         console.log('[WebSpeechASR] onspeechstart fired — microphone is picking up speech!');
+        resetSilenceTimer();
         callbacks.onSpeechStart?.();
       };
 
       recognition.onresult = (event) => {
-        console.log('[WebSpeechASR] onresult fired! resultIndex=', event.resultIndex, 'total results=', event.results.length);
+        resetSilenceTimer();
+        let interimTranscript = '';
         for (let i = event.resultIndex; i < event.results.length; i++) {
           const result = event.results[i];
-          if (!result || !result.isFinal) {
-            console.log('[WebSpeechASR] result[', i, '] is interim, skipping');
-            continue;
-          }
           const alternative = result[0];
           if (!alternative) continue;
-          console.log('[WebSpeechASR] FINAL transcript received:', alternative.transcript, '| confidence:', alternative.confidence);
-          state.transcript = `${state.transcript} ${alternative.transcript}`.trim();
-          if (typeof alternative.confidence === 'number' && alternative.confidence > 0) {
-            state.confidence = alternative.confidence;
+          
+          if (result.isFinal) {
+            state.transcript = `${state.transcript} ${alternative.transcript}`.trim();
+            if (typeof alternative.confidence === 'number' && alternative.confidence > 0) {
+              state.confidence = alternative.confidence;
+            }
+          } else {
+            interimTranscript = `${interimTranscript} ${alternative.transcript}`.trim();
           }
         }
+        const fullText = `${state.transcript} ${interimTranscript}`.trim();
+        callbacks.onInterimResult?.(fullText);
       };
 
       recognition.onerror = (event) => {
         console.error('[WebSpeechASR] onerror fired! error code=', event?.error);
+        if (recognition.continuous) {
+          if (event?.error === 'no-speech' || event?.error === 'network' || event?.error === 'aborted') {
+            console.log('[WebSpeechASR] Ignoring error because continuous is true:', event?.error);
+            return;
+          }
+        }
         state.errorCode = event?.error || 'unknown';
       };
 
       recognition.onend = () => {
         console.log('[WebSpeechASR] onend fired. Final transcript=', state.transcript, '| errorCode=', state.errorCode);
-        this.settle();
+        if (recognition.continuous && !this.stopped && !state.errorCode) {
+          console.log('[WebSpeechASR] Browser stopped recognition automatically, but continuous=true. Restarting...');
+          const tryRestart = () => {
+            if (this.stopped) return;
+            try {
+              recognition.start();
+            } catch (e) {
+              console.warn('[WebSpeechASR] Restart threw error, retrying in 100ms...');
+              setTimeout(tryRestart, 100);
+            }
+          };
+          setTimeout(tryRestart, 50);
+        } else {
+          this.settle();
+        }
       };
 
       this.recognition = recognition;
@@ -244,6 +282,7 @@ export class WebSpeechAsrService {
       };
     });
 
+    this.stopped = true;
     try {
       recognition.stop();
     } catch (err) {
@@ -254,6 +293,7 @@ export class WebSpeechAsrService {
 
   /** Hard teardown, used on unmount and when a new listening pass begins. */
   public abort(): void {
+    this.stopped = true;
     const recognition = this.recognition;
     if (recognition) {
       try {

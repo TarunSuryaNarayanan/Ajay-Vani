@@ -105,7 +105,7 @@ export class SpeechService {
     const packReady = pack && isPackConfigured(pack) && packStateManager.getState(lang) === 'ready';
     if (!packReady && webSpeechAsrService.isSupported()) {
       console.log('[SpeechService] No local pack ready — skipping VAD pipeline, using WebSpeech directly for lang=', lang);
-      this.recognizeDirectly(lang, onResult, onError, onEnd);
+      this.recognizeDirectly(lang, onResult, onError, onEnd, true); // pass continuous=true for conversation
       return;
     }
 
@@ -158,9 +158,10 @@ export class SpeechService {
     lang: LanguageCode,
     onResult: (transcript: string, isFinal: boolean) => void,
     onError: (error: string) => void,
-    onEnd: () => void
+    onEnd: () => void,
+    continuous: boolean = false
   ): void {
-    console.log('[SpeechService] recognizeDirectly() called. lang=', lang);
+    console.log('[SpeechService] recognizeDirectly() called. lang=', lang, 'continuous=', continuous);
     if (!webSpeechAsrService.isSupported()) {
       console.error('[SpeechService] WebSpeech NOT supported in this browser!');
       onError('Speech recognition is not supported in this browser.');
@@ -169,7 +170,10 @@ export class SpeechService {
     }
     console.log('[SpeechService] WebSpeech IS supported. Starting recognition...');
     this.webSpeechActive = true;
-    webSpeechAsrService.recognize(lang).then(result => {
+    webSpeechAsrService.recognize(lang, { 
+      continuous,
+      onInterimResult: (text) => onResult(text, false)
+    }).then(result => {
       this.webSpeechActive = false;
       console.log('[SpeechService] recognizeDirectly result:', result);
       if (result.success && result.transcript) {

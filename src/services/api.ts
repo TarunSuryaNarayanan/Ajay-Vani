@@ -37,17 +37,16 @@ export function localFallbackProcess(transcript: string, districtName = "Varanas
     beneficiaryName = normaliseSpokenName(nameMatch[1], dialect);
   }
 
-  // Match QP
-  let qpCode = "ELE/Q5901";
-  let roleName = "Solar PV Installer & Electrician";
-  let roleNameHi = "सोलर पीवी इंस्टॉलर एवं तकनीशियन";
-  let nsqfLevel = 4;
-  let sector = "Green Jobs / Renewable Energy";
-  let matchScore = 92;
-  let vacanciesCount = 120;
-  let income = "₹18,000 - ₹26,000 / माह";
+  let qpCode = "MEP/Q0101"; // Generic fallback
+  let roleName = "General Helper & Trainee";
+  let roleNameHi = "सामान्य सहायक एवं प्रशिक्षु";
+  let nsqfLevel = 2;
+  let sector = "Multi-Sector";
+  let matchScore = 70;
+  let vacanciesCount = 50;
+  let income = "₹10,000 - ₹15,000 / माह";
 
-  if (lower.includes("doodh") || lower.includes("dairy") || lower.includes("gai") || lower.includes("bhains") || lower.includes("दूध") || lower.includes("डेयरी") || lower.includes("पशु")) {
+  if (/doodh|dairy|gai|bhains|दूध|डेयरी|डेरी|पशु/i.test(lower)) {
     qpCode = "AGR/Q6701";
     roleName = "Dairy Farmer & Milk Processing Entrepreneur";
     roleNameHi = "डेयरी उद्यमी एवं दुग्ध संकलन संचालक";
@@ -55,7 +54,7 @@ export function localFallbackProcess(transcript: string, districtName = "Varanas
     matchScore = 94;
     vacanciesCount = 140;
     income = "₹20,000 - ₹35,000 / माह";
-  } else if (lower.includes("tractor") || lower.includes("mistri") || lower.includes("diesel") || lower.includes("ट्रैक्टर") || lower.includes("मिस्त्री")) {
+  } else if (/tractor|mistri|diesel|ट्रैक्टर|मिस्त्री|mechanic/i.test(lower)) {
     qpCode = "AGR/Q1201";
     roleName = "Tractor & Farm Equipment Repair Specialist";
     roleNameHi = "ट्रैक्टर एवं कृषि उपकरण मरम्मत विशेषज्ञ";
@@ -63,7 +62,7 @@ export function localFallbackProcess(transcript: string, districtName = "Varanas
     matchScore = 91;
     vacanciesCount = 85;
     income = "₹18,000 - ₹28,000 / माह";
-  } else if (lower.includes("zari") || lower.includes("silai") || lower.includes("kapda") || lower.includes("जरी") || lower.includes("सिलाई") || lower.includes("कपड़ा")) {
+  } else if (/zari|silai|silne|kapda|kapde|kapdon|जरी|सिलाई|सिलने|कपड़ा|कपड़े|कपड़ों/i.test(lower)) {
     qpCode = "AMH/Q0101";
     roleName = "Zari & Traditional Hand Embroidery Artisan";
     roleNameHi = "जरी-जरदोजी एवं पारंपरिक हस्तशिल्प कारीगर";
@@ -71,6 +70,15 @@ export function localFallbackProcess(transcript: string, districtName = "Varanas
     matchScore = 96;
     vacanciesCount = 115;
     income = "₹15,000 - ₹24,000 / माह";
+  } else if (/solar|bijli|wire|electric|सोलर|बिजली|वायर/i.test(lower)) {
+    qpCode = "ELE/Q5901";
+    roleName = "Solar PV Installer & Electrician";
+    roleNameHi = "सोलर पीवी इंस्टॉलर एवं तकनीशियन";
+    nsqfLevel = 4;
+    sector = "Green Jobs / Renewable Energy";
+    matchScore = 92;
+    vacanciesCount = 120;
+    income = "₹18,000 - ₹26,000 / माह";
   }
 
   // Spoken in the selected language, matching what the server would say online.

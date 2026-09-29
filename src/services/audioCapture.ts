@@ -105,7 +105,7 @@ export class AudioCaptureService {
   private silenceTimeout: ReturnType<typeof setTimeout> | null = null;
   private speechStarted: boolean = false;
 
-  private readonly SILENCE_TIMEOUT_MS = 1500;
+  private readonly SILENCE_TIMEOUT_MS = 8000;
   private readonly MIN_RECORDING_MS = 500;
 
   async loadVAD(): Promise<any> {
