@@ -11,6 +11,7 @@ import {
   LifecycleNudgeKey,
 } from '../../src/types';
 import { isWhatsAppConfigured, normaliseWhatsAppNumber, sendWhatsAppMessage } from './whatsapp';
+import { isIvrConfigured, makeIvrCall } from './ivrCall';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -76,6 +77,7 @@ export function enrollLifecycle(params: {
   beneficiaryName: string;
   district: string;
   whatsappNumber: string;
+  language: string;
   enrolledAt?: number;
 }): LifecycleEnrollment {
   const { beneficiaryId, beneficiaryName, district, whatsappNumber } = params;
@@ -94,6 +96,7 @@ export function enrollLifecycle(params: {
     beneficiaryName,
     district,
     whatsappNumber: normalized,
+    language: params.language as any,
     enrolledAt: params.enrolledAt ?? Date.now(),
     lastNudgeAt: null,
     messages: [],
@@ -134,13 +137,34 @@ async function dispatchNudge(
   };
   enrollment.messages.push(message);
 
+  // 1. Try IVR Call first
+  const nudgeType = entry.key === 'day-45-checkin' ? 'day-45' : 'day-90';
+  const ivrResult = await makeIvrCall({
+    phone: enrollment.whatsappNumber,
+    language: enrollment.language,
+    nudgeType,
+    beneficiaryName: enrollment.beneficiaryName,
+  });
+
+  if (ivrResult.called || ivrResult.dryRun) {
+    message.status = 'sent';
+    message.deliveredAt = now;
+    // Log the script used in the call body for the dashboard
+    message.body = `[IVR CALL] ${ivrResult.script}`;
+    enrollment.lastNudgeAt = now;
+    console.log(`[Lifecycle] ${entry.key} IVR nudge sent to ${enrollment.beneficiaryName}`);
+    return { key: entry.key, attempted: true, delivered: true, message };
+  }
+
+  // 2. Fallback to WhatsApp if IVR fails
+  console.log(`[Lifecycle] IVR failed for ${enrollment.beneficiaryName}, falling back to WhatsApp...`);
   const result = await sendWhatsAppMessage(enrollment.whatsappNumber, body);
 
   if (result.sent) {
     message.status = 'sent';
     message.deliveredAt = now;
     enrollment.lastNudgeAt = now;
-    console.log(`[Lifecycle] ${entry.key} nudge sent to ${enrollment.beneficiaryName} (sid=${result.messageSid})`);
+    console.log(`[Lifecycle] ${entry.key} WhatsApp nudge sent to ${enrollment.beneficiaryName} (sid=${result.messageSid})`);
   } else {
     // Keep the slot open so the next sweep retries once credentials/phone are valid.
     message.status = 'failed';
@@ -192,9 +216,9 @@ export function recordInboundReply(fromNumber: string, body: string): LifecycleE
 const SWEEP_INTERVAL_MS = Number(process.env.LIFECYCLE_SWEEP_INTERVAL_MS || 60 * 1000);
 
 export function startLifecycleScheduler(): () => void {
-  if (!isWhatsAppConfigured()) {
+  if (!isWhatsAppConfigured() && !isIvrConfigured()) {
     console.warn(
-      '[Lifecycle] WhatsApp credentials not set (TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_WHATSAPP_FROM). ' +
+      '[Lifecycle] Neither Exotel IVR nor WhatsApp credentials set. ' +
         'Nudge scheduler is running in dry mode.'
     );
   }

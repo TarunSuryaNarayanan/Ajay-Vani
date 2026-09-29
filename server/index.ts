@@ -1,3 +1,4 @@
+import 'dotenv/config'; // MUST be first — loads .env before any other module
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import path from 'path';
@@ -38,8 +39,7 @@ import { searchGovernmentCentres } from './data/centres/governmentCentres';
 import { attachDistances } from './data/centres/distance';
 import { LanguageCode } from '../src/types';
 
-// Load .env credentials for Bhashini
-import 'dotenv/config';
+// .env loaded at the top via first import
 
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 5000;
@@ -345,7 +345,8 @@ interface AnalyzeTranscriptResult {
 function analyzeTranscript(
   transcript: string,
   districtName: string = "Varanasi",
-  dialect: string = "hi-IN"
+  dialect: string = "hi-IN",
+  knownName?: string
 ): AnalyzeTranscriptResult {
   const lower = transcript.toLowerCase();
 
@@ -429,7 +430,7 @@ function analyzeTranscript(
 
   // ── Parameter 5: Beneficiary Name Extractor ──
   // Extracts spoken name via regex
-  let beneficiaryName = normaliseSpokenName(undefined, dialect as LanguageCode);
+  let beneficiaryName = normaliseSpokenName(knownName, dialect as LanguageCode);
   const nameMatch = transcript.match(/(?:नाम|naam|मेरा नाम|हमार नाम|मेरा|hamara|sir|सर)\s+([A-Za-z\u0900-\u097F]+(?:\s+[A-Za-z\u0900-\u097F]+)*)/i);
   if (nameMatch && nameMatch[1]) {
     const extracted = nameMatch[1].trim();
@@ -521,7 +522,7 @@ function analyzeTranscript(
 
 app.post('/api/voice/process', (req: Request, res: Response) => {
   try {
-    const { transcript, district = "Varanasi", state = "Uttar Pradesh", language = "hi-IN" } = req.body;
+    const { transcript, district = "Varanasi", state = "Uttar Pradesh", language = "hi-IN", knownName } = req.body;
 
     if (!transcript || typeof transcript !== 'string') {
       return res.status(400).json({
@@ -530,7 +531,7 @@ app.post('/api/voice/process', (req: Request, res: Response) => {
       });
     }
 
-    const result = analyzeTranscript(transcript, district, language);
+    const result = analyzeTranscript(transcript, district, language, knownName);
 
     return res.json({
       success: true,
@@ -878,30 +879,56 @@ app.get('/api/lifecycle/schedule', (_req: Request, res: Response) => {
 
 app.post('/api/lifecycle/enroll', (req: Request, res: Response) => {
   try {
-    const { beneficiaryId, beneficiaryName, district, whatsappNumber, enrolledAt } = req.body || {};
+    const { beneficiaryId, beneficiaryName, district, whatsappNumber, enrolledAt, language } = req.body || {};
     if (!beneficiaryId || !whatsappNumber) {
       return res.status(400).json({ success: false, error: 'beneficiaryId and whatsappNumber are required.' });
     }
-    const normalized = normaliseWhatsAppNumber(whatsappNumber);
-    if (!normalized) {
-      return res.status(400).json({ success: false, error: 'A valid 10-digit WhatsApp number is required.' });
-    }
+    // Accept E.164 (+91XXXXXXXXXX) OR plain 10-digit — normalise handles both
+    const normalized = normaliseWhatsAppNumber(whatsappNumber) || whatsappNumber;
+    console.log(`[Lifecycle] Enrolling ${beneficiaryName} (${beneficiaryId}) phone=${normalized} lang=${language}`);
     const enrollment = enrollLifecycle({
       beneficiaryId,
       beneficiaryName: beneficiaryName || '',
       district: district || 'Varanasi',
       whatsappNumber: normalized,
+      language: language || 'hi-IN',
       enrolledAt: typeof enrolledAt === 'number' ? enrolledAt : undefined,
     });
     return res.json({
       success: true,
       enrollment,
       whatsappConfigured: isWhatsAppConfigured(),
-      message: 'व्हाट्सएप जीवनचक्र सूचनाओं के लिए नामांकन हो गया। | Enrolled for lifecycle nudges.',
+      message: 'Enrolled for lifecycle IVR nudges.',
     });
   } catch (err: any) {
     console.error('[Lifecycle] Enroll error:', err);
     return res.status(500).json({ success: false, error: 'Failed to enroll beneficiary for lifecycle nudges.' });
+  }
+});
+
+// Exotel StatusCallback webhook
+app.post('/api/ivr/callback', (req: Request, res: Response) => {
+  const { CallSid, Status, CustomField } = req.body || {};
+  console.log(`[IVR Webhook] Call ${CallSid} status: ${Status}`, CustomField);
+  res.sendStatus(200);
+});
+
+// Direct IVR test endpoint — fires an immediate call for demo/debugging
+app.post('/api/ivr/test-call', async (req: Request, res: Response) => {
+  try {
+    const { phone, language, nudgeType, name } = req.body || {};
+    const { makeIvrCall } = await import('./services/ivrCall');
+    const result = await makeIvrCall({
+      phone: phone || '+918431852247',
+      language: language || 'hi-IN',
+      nudgeType: nudgeType || 'day-45',
+      beneficiaryName: name || 'Ramesh Kumar',
+    });
+    console.log('[IVR Test] Result:', result);
+    return res.json({ success: true, result });
+  } catch (err: any) {
+    console.error('[IVR Test] Error:', err);
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 

@@ -23,7 +23,8 @@ export const VoiceChatScreen: React.FC = () => {
     setDistrict, 
     saveInterviewResult, 
     setScreen,
-    isOnline
+    isOnline,
+    aadhaarSession
   } = useApp();
 
   const [isRecording, setIsRecording] = useState(false);
@@ -158,7 +159,8 @@ export const VoiceChatScreen: React.FC = () => {
         spokenText,
         selectedDistrict,
         "Uttar Pradesh",
-        selectedLanguage
+        selectedLanguage,
+        aadhaarSession?.beneficiaryName
       );
 
       setLastAIResponse(data.friendlyAudioResponse);
@@ -179,7 +181,7 @@ export const VoiceChatScreen: React.FC = () => {
     } catch (err: any) {
       setErrorMessage(null);
       try {
-        const fallbackResult = localFallbackProcess(spokenText, selectedDistrict, selectedLanguage);
+        const fallbackResult = localFallbackProcess(spokenText, selectedDistrict, selectedLanguage, aadhaarSession?.beneficiaryName);
         setLastAIResponse(fallbackResult.friendlyAudioResponse);
         setSpokenPrompt(fallbackResult.friendlyAudioResponse);
         speechService.speak(

@@ -16,7 +16,7 @@ import { buildSpokenResponse, normaliseSpokenName } from './spokenResponse';
 const API_BASE = '/api';
 
 // Fallback local NLP engine in case network is down (zero-internet offline mode)
-export function localFallbackProcess(transcript: string, districtName = "Varanasi", dialect: LanguageCode = "hi-IN"): VoiceProcessResult {
+export function localFallbackProcess(transcript: string, districtName = "Varanasi", dialect: LanguageCode = "hi-IN", knownName?: string): VoiceProcessResult {
   const lower = transcript.toLowerCase();
 
   let educationLevel = "अनौपचारिक शिक्षा";
@@ -31,7 +31,7 @@ export function localFallbackProcess(transcript: string, districtName = "Varanas
   }
 
   // Detect beneficiary name if spoken
-  let beneficiaryName = normaliseSpokenName(undefined, dialect);
+  let beneficiaryName = normaliseSpokenName(knownName, dialect);
   const nameMatch = transcript.match(/(?:naam|नाम|हमार नाम|मेरा नाम)\s+([A-Za-zऀ-ॿ]+)/i);
   if (nameMatch && nameMatch[1]) {
     beneficiaryName = normaliseSpokenName(nameMatch[1], dialect);
@@ -144,13 +144,14 @@ export async function processVoiceTranscript(
   transcript: string,
   district = "Varanasi",
   state = "Uttar Pradesh",
-  language: LanguageCode = "hi-IN"
+  language: LanguageCode = "hi-IN",
+  knownName?: string
 ): Promise<VoiceProcessResult> {
   try {
     const res = await fetch(`${API_BASE}/voice/process`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ transcript, district, state, language })
+      body: JSON.stringify({ transcript, district, state, language, knownName })
     });
 
     if (!res.ok) {
@@ -161,7 +162,7 @@ export async function processVoiceTranscript(
     return data;
   } catch (error) {
     console.warn("API request failed or offline. Using local offline livelihood matcher:", error);
-    return localFallbackProcess(transcript, district, language);
+    return localFallbackProcess(transcript, district, language, knownName);
   }
 }
 

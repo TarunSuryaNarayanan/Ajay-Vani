@@ -180,3 +180,30 @@ export function buildSpokenResponse(lang: LanguageCode, vars: SpokenResponseVars
       return `नमस्ते ${beneficiaryName} जी! आपके अनुभव के आधार पर ${role} आपके लिए सबसे उपयुक्त है। आपके जिले ${district} में इस ट्रेड के ${centres} प्रशिक्षण केंद्र सूचीबद्ध हैं। पास के केंद्र में ${hours} घंटे का निःशुल्क प्रशिक्षण उपलब्ध है।`;
   }
 }
+
+export function buildCentersResponse(lang: LanguageCode, district: string, count: number, distance: number): string {
+  const distStr = distance.toFixed(1);
+  switch (lang) {
+    case 'bho-IN':
+      return `आपके जिले ${district} में ${count} गो प्रशिक्षण केंद्र दर्ज बा। सबसे नजदीकी केंद्र ${distStr} किमी दूर बा।`;
+    case 'bun-IN':
+      return `आपके जिले ${district} में ${count} गो प्रशिक्षण केंद्र दर्ज बा। पास के केंद्र ${distStr} किमी दूर है।`;
+    case 'chg-IN':
+      return `आपके जिले ${district} में ${count} गो प्रशिक्षण केंद्र दर्बल बा। सबसे नजदीकी केंद्र ${distStr} किमी दूर हे।`;
+    case 'mai-IN':
+      return `आपके जिले ${district} में ${count} प्रशिक्षण केंद्र सूचीबद्ध अछि। सबसँ लग के केंद्र ${distStr} किमी दूर अछि।`;
+    case 'ta-IN':
+      return `உங்கள் ${district} மாவிரசத்தில் ${count} பயிற்சி மையங்கள் உள்ளன. அருகிலுள்ள மையம் ${distStr} கிமீ தொலைவில் உள்ளது.`;
+    case 'te-IN':
+      return `మీ ${district} జిల్లాలో ${count} శిక్షణ కేంద్రాలు జాబితా చేయబడ్డాయి. దగ్గరి కేంద్రం ${distStr} కి.మీ దూరంలో ఉంది.`;
+    case 'mr-IN':
+      return `तुमच्या ${district} जिल्ह्यात ${count} प्रशिक्षण केंद्रे नोंदवलेली आहेत. सर्वात जवळचे केंद्र ${distStr} किमी दूर आहे.`;
+    case 'bn-IN':
+      return `আপনার ${district} জেলায় ${count}টি প্রশিক্ষণ কেন্দ্র তালিকাভুক্ত। কাছের কেন্দ্রটি ${distStr} কিমি দূরে।`;
+    case 'en-IN':
+      return `There are ${count} training centres listed in ${district} district. The nearest centre is ${distStr} km away.`;
+    case 'hi-IN':
+    default:
+      return `आपके जिले ${district} में ${count} प्रशिक्षण केंद्र सूचीबद्ध हैं। निकटतम प्रशिक्षण केंद्र ${distStr} किलोमीटर दूर है।`;
+  }
+}

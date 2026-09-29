@@ -183,6 +183,7 @@ export interface LifecycleEnrollment {
   beneficiaryName: string;
   district: string;
   whatsappNumber: string;
+  language: LanguageCode;
   enrolledAt: number;
   lastNudgeAt: number | null;
   messages: LifecycleMessage[];
